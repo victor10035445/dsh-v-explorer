@@ -1,0 +1,25 @@
+# npm
+node_modules/
+*.tgz
+
+# Python 缓存（.trae / .claude 的本地缓存目录）
+__pycache__/
+*.pyc
+
+# 系统缩略图
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# AI 协作工具本地文件（不入库、不同步）
+.claude/
+.trae/
+
+# OpenSpec 工作区产物（specs/changes 归档，不入仓库）
+openspec/
+
+# 插件数据目录（本仓库内跑冒烟/本地测试时可能生成）
+.dsh-v-explorer/
+
+# 日志
+*.log

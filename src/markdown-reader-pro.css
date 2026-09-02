@@ -1,0 +1,1305 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ *  MARKDOWN READER PRO - Premium Dark Theme for PyCharm
+ * ═══════════════════════════════════════════════════════════════════
+ * 
+ *  Design System: Elegant Documentation Reader
+ *  Style: Glassmorphism + Minimalism
+ *  Color Palette: Deep Ocean (Professional Dark)
+ *  Typography: Inter + JetBrains Mono
+ * 
+ *  使用方法：
+ *  1. PyCharm → Settings → Languages & Frameworks → Markdown
+ *  2. Preview → CSS → Add custom CSS
+ *  3. 粘贴此文件路径或复制内容
+ *
+ *  本文件同时是 dsh-v-explorer 插件 Markdown 预览的样式单一来源：
+ *  `pnpm build` 时由 src/reader-css.transform.mjs 作用域化（收进预览浮窗、
+ *  裁掉插件渲染不出的段落）后注入，改这里再构建即可生效。
+ * 
+ *  Version: 2.0
+ *  Updated: 2026-02-25
+ * ═══════════════════════════════════════════════════════════════════
+ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   DESIGN TOKENS - CSS Custom Properties
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+    /* ─── Background Colors ─── */
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --bg-elevated: #1c2128;
+    --bg-overlay: rgba(13, 17, 23, 0.8);
+    
+    /* ─── Text Colors (WCAG AA Compliant) ─── */
+    --text-primary: #e6edf3;
+    --text-secondary: #b1bac4;
+    --text-tertiary: #8b949e;
+    --text-muted: #6e7681;
+    --text-link: #58a6ff;
+    --text-link-hover: #79c0ff;
+    
+    /* ─── Accent Colors ─── */
+    --accent-primary: #58a6ff;
+    --accent-secondary: #a371f7;
+    --accent-success: #3fb950;
+    --accent-warning: #d29922;
+    --accent-danger: #f85149;
+    --accent-info: #56d4dd;
+    
+    /* ─── Gradient Accents ─── */
+    --gradient-primary: linear-gradient(135deg, #58a6ff 0%, #a371f7 100%);
+    --gradient-success: linear-gradient(135deg, #3fb950 0%, #56d4dd 100%);
+    --gradient-header: linear-gradient(90deg, #58a6ff, #a371f7, #f778ba);
+    
+    /* ─── Border Colors ─── */
+    --border-default: #30363d;
+    --border-muted: #21262d;
+    --border-accent: rgba(88, 166, 255, 0.4);
+    
+    /* ─── Code Block Colors ─── */
+    --code-bg: #0d1117;
+    --code-inline-bg: rgba(110, 118, 129, 0.15);
+    --code-border: #30363d;
+    
+    /* ─── Table Colors ─── */
+    --table-header-bg: #161b22;
+    --table-row-hover: rgba(88, 166, 255, 0.08);
+    --table-stripe: rgba(110, 118, 129, 0.05);
+    
+    /* ─── Typography Scale ─── */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+    --font-serif: 'Merriweather', 'Noto Serif', Georgia, serif;
+    
+    /* ─── Spacing Scale ─── */
+    --space-xs: 0.25rem;
+    --space-sm: 0.5rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2rem;
+    --space-2xl: 3rem;
+    
+    /* ─── Border Radius ─── */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-full: 9999px;
+    
+    /* ─── Shadows ─── */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --shadow-glow: 0 0 20px rgba(88, 166, 255, 0.15);
+    
+    /* ─── Transitions ─── */
+    --transition-fast: 150ms ease;
+    --transition-normal: 200ms ease;
+    --transition-slow: 300ms ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BASE RESET & GLOBAL STYLES
+   ═══════════════════════════════════════════════════════════════════ */
+
+html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.75;
+    letter-spacing: -0.01em;
+    padding: var(--space-xl) var(--space-2xl);
+    max-width: 900px;
+    margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+
+/* Selection */
+::selection {
+    background: rgba(88, 166, 255, 0.3);
+    color: var(--text-primary);
+}
+
+/* Focus States (Accessibility) */
+:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TYPOGRAPHY - Headings
+   ═══════════════════════════════════════════════════════════════════ */
+
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-primary);
+    font-weight: 600;
+    line-height: 1.25;
+    margin-top: var(--space-2xl);
+    margin-bottom: var(--space-md);
+    letter-spacing: -0.02em;
+}
+
+/* VSCode Markdown预览兼容性修复 - 禁用标题悬停弹框 */
+/* 原理：VSCode在悬停标题时会动态创建伪元素tooltip，与自定义CSS冲突 */
+/* 仅针对标题元素,避免影响Mermaid等其他元素 */
+h1:hover::after, h1:hover::before,
+h2:hover::after, h2:hover::before,
+h3:hover::after, h3:hover::before,
+h4:hover::after, h4:hover::before,
+h5:hover::after, h5:hover::before,
+h6:hover::after, h6:hover::before {
+    display: none !important;
+    content: none !important;
+}
+
+/* 允许Mermaid的::after伪元素正常显示 */
+.mermaid::after,
+.mermaid::before,
+.mermaid *::after,
+.mermaid *::before {
+    display: block !important;
+}
+
+/* H1 - Main Title */
+h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    padding-bottom: var(--space-md);
+    margin-top: 0;
+    background: var(--gradient-header);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    position: relative;
+}
+
+h1::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-full);
+}
+
+/* H2 - Section Title */
+h2 {
+    font-size: 1.875rem;
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--border-default);
+    position: relative;
+    /* 渐变文字效果 */
+    background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+h2::before {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 60px;
+    height: 2px;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-full);
+}
+
+/* H2 下划线也使用渐变 */
+h2::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 60px;
+    right: 0;
+    height: 1px;
+    background: var(--border-default);
+}
+
+/* H3 - Subsection */
+h3 {
+    font-size: 1.5rem;
+    color: var(--accent-primary);
+}
+
+/* H4 - Minor Heading */
+h4 {
+    font-size: 1.25rem;
+    color: var(--accent-secondary);
+}
+
+/* H5 - Label */
+h5 {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* H6 - Caption */
+h6 {
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PARAGRAPHS & TEXT ELEMENTS
+   ═══════════════════════════════════════════════════════════════════ */
+
+p {
+    margin: 0 0 var(--space-lg);
+    line-height: 1.8;
+}
+
+/* Strong emphasis */
+strong, b {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Emphasis */
+em, i {
+    color: var(--accent-secondary);
+    font-style: italic;
+}
+
+/* Strikethrough */
+del, s {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+/* Highlight/Mark */
+mark {
+    background: linear-gradient(120deg, 
+        rgba(210, 153, 34, 0.25) 0%, 
+        rgba(210, 153, 34, 0.15) 100%);
+    color: var(--accent-warning);
+    padding: 0.1em 0.4em;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+}
+
+/* Links */
+a {
+    color: var(--text-link);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: all var(--transition-fast);
+    cursor: pointer;
+}
+
+a:hover {
+    color: var(--text-link-hover);
+    border-bottom-color: var(--text-link-hover);
+}
+
+a:visited {
+    color: var(--accent-secondary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LISTS
+   ═══════════════════════════════════════════════════════════════════ */
+
+ul, ol {
+    margin: 0 0 var(--space-lg);
+    padding-left: 1.75em;
+}
+
+li {
+    margin: var(--space-xs) 0;
+    line-height: 1.7;
+}
+
+/* List markers */
+ul > li::marker {
+    color: var(--accent-primary);
+    font-size: 1.1em;
+}
+
+ol > li::marker {
+    color: var(--accent-primary);
+    font-weight: 600;
+}
+
+/* Nested lists */
+ul ul, ol ol, ul ol, ol ul {
+    margin: var(--space-sm) 0;
+}
+
+/* Task list checkboxes */
+input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    margin-right: var(--space-sm);
+    margin-left: -1.5em;
+    vertical-align: middle;
+    position: relative;
+    cursor: pointer;
+    background: var(--bg-secondary);
+    transition: all var(--transition-fast);
+}
+
+input[type="checkbox"]:hover {
+    border-color: var(--accent-primary);
+}
+
+input[type="checkbox"]:checked {
+    background: var(--accent-success);
+    border-color: var(--accent-success);
+}
+
+input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--bg-primary);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BLOCKQUOTES
+   ═══════════════════════════════════════════════════════════════════ */
+
+blockquote {
+    margin: var(--space-lg) 0;
+    padding: var(--space-md) var(--space-lg);
+    border-left: 4px solid var(--accent-primary);
+    background: var(--bg-secondary);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    color: var(--text-secondary);
+    position: relative;
+    overflow: hidden;
+}
+
+blockquote::before {
+    content: '"';
+    position: absolute;
+    top: -10px;
+    left: 12px;
+    font-size: 4rem;
+    color: var(--accent-primary);
+    opacity: 0.15;
+    font-family: Georgia, serif;
+    line-height: 1;
+}
+
+blockquote p {
+    margin: 0;
+    position: relative;
+    z-index: 1;
+}
+
+blockquote p + p {
+    margin-top: var(--space-md);
+}
+
+/* Nested blockquote */
+blockquote blockquote {
+    margin: var(--space-md) 0;
+    border-left-color: var(--accent-secondary);
+    background: var(--bg-tertiary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CODE BLOCKS
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Inline code */
+code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: var(--code-inline-bg);
+    color: var(--accent-info);
+    padding: 0.15em 0.45em;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-muted);
+}
+
+/* Code block container */
+pre {
+    margin: var(--space-lg) 0;
+    padding: var(--space-lg);
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: var(--radius-lg);
+    overflow-x: auto;
+    position: relative;
+    box-shadow: var(--shadow-md);
+}
+
+pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.7;
+    display: block;
+}
+
+/* Code block language badge */
+pre[class*="language-"]::before,
+pre[data-lang]::before {
+    content: attr(data-lang);
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: var(--space-xs) var(--space-md);
+    font-size: 0.7rem;
+    font-family: var(--font-sans);
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    border-radius: 0 var(--radius-lg) 0 var(--radius-md);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SYNTAX HIGHLIGHTING
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Keywords */
+.keyword, .kw, .token.keyword {
+    color: #ff7b72;
+}
+
+/* Strings */
+.string, .str, .token.string {
+    color: #a5d6ff;
+}
+
+/* Numbers */
+.number, .num, .token.number {
+    color: #79c0ff;
+}
+
+/* Comments */
+.comment, .c, .token.comment {
+    color: #8b949e;
+    font-style: italic;
+}
+
+/* Functions */
+.function, .fn, .token.function {
+    color: #d2a8ff;
+}
+
+/* Variables */
+.variable, .var, .token.variable {
+    color: #ffa657;
+}
+
+/* Classes/Types */
+.class, .cls, .token.class-name {
+    color: #7ee787;
+}
+
+/* Operators */
+.operator, .op, .token.operator {
+    color: #ff7b72;
+}
+
+/* Punctuation */
+.punctuation, .token.punctuation {
+    color: #8b949e;
+}
+
+/* Properties */
+.property, .token.property {
+    color: #79c0ff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TABLES - Bordered 边框风格
+   特点: 完整网格边框、表头强调、悬停高亮、圆角设计
+   适用: 复杂数据、财务报表、技术文档
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* 表格容器 - 用于圆角裁剪 */
+.table-wrapper {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 2px solid var(--border-default);
+    margin: var(--space-lg) 0;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+}
+
+/* Table header - 表头强调 */
+thead {
+    background: var(--bg-tertiary);
+}
+
+thead th {
+    border-bottom: 2px solid var(--accent-primary) !important;
+    border-right: 1px solid var(--border-default);
+    padding: var(--space-md) var(--space-lg);
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+thead th:last-child {
+    border-right: none;
+}
+
+/* Table body - 完整网格边框 */
+tbody tr {
+    background: transparent;
+    transition: background var(--transition-fast);
+}
+
+/* 悬停高亮 */
+tbody tr:hover {
+    background: var(--table-row-hover);
+}
+
+tbody td {
+    text-align: left;
+    border-bottom: 1px solid var(--border-default);
+    border-right: 1px solid var(--border-muted);
+    padding: var(--space-md) var(--space-lg);
+    color: var(--text-secondary);
+}
+
+tbody td:last-child {
+    border-right: none;
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* 表格内代码样式统一 */
+table code {
+    font-size: 0.8em;
+    padding: 0.1em 0.3em;
+}
+
+/* 表格内链接样式统一 */
+table a {
+    color: var(--accent-primary);
+}
+
+table a:hover {
+    color: var(--text-link-hover);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   表格样式变体 - 可选样式
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* 无包装器的表格 - 直接应用边框（使用角落单元格圆角） */
+table:not(.table-wrapper table) {
+    border: 2px solid var(--border-default);
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: var(--space-lg) 0;
+}
+
+/* 四个角落的圆角 */
+table:not(.table-wrapper table) thead tr:first-child th:first-child {
+    border-top-left-radius: var(--radius-lg);
+}
+
+table:not(.table-wrapper table) thead tr:first-child th:last-child {
+    border-top-right-radius: var(--radius-lg);
+}
+
+table:not(.table-wrapper table) tbody tr:last-child td:first-child {
+    border-bottom-left-radius: var(--radius-lg);
+}
+
+table:not(.table-wrapper table) tbody tr:last-child td:last-child {
+    border-bottom-right-radius: var(--radius-lg);
+}
+
+/* 确保 thead th 边框在所有情况下都显示 */
+table thead th {
+    border-bottom: 2px solid var(--accent-primary) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HORIZONTAL RULE
+   ═══════════════════════════════════════════════════════════════════ */
+
+hr {
+    border: none;
+    height: 2px;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        var(--accent-primary) 20%, 
+        var(--accent-secondary) 50%, 
+        var(--accent-primary) 80%, 
+        transparent 100%);
+    margin: var(--space-2xl) 0;
+    border-radius: var(--radius-full);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   IMAGES
+   ═══════════════════════════════════════════════════════════════════ */
+
+img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-lg);
+    margin: var(--space-lg) 0;
+    border: 1px solid var(--border-default);
+    box-shadow: var(--shadow-md);
+    transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+img:hover {
+    transform: scale(1.01);
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   KEYBOARD SHORTCUTS
+   ═══════════════════════════════════════════════════════════════════ */
+
+kbd {
+    display: inline-block;
+    padding: 0.2em 0.5em;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    box-shadow: 
+        0 2px 0 var(--border-default),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    vertical-align: middle;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HORIZONTAL RULE
+   ═══════════════════════════════════════════════════════════════════ */
+
+.math-block, .katex-display {
+    margin: var(--space-lg) 0;
+    padding: var(--space-lg);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    text-align: center;
+    overflow-x: auto;
+    border: 1px solid var(--border-muted);
+}
+
+.math-inline, .katex {
+    color: var(--accent-secondary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MERMAID DIAGRAMS - 固定容器滚动方案
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* 
+   设计理念：
+   1. 固定容器高度（600px），避免占据过多页面空间
+   2. SVG 保持合理大小（1.3x），确保文字清晰
+   3. 提供平滑滚动，支持拖拽查看
+   4. 简单好用，纯 CSS 方案
+*/
+
+/* ─── Mermaid 容器：固定尺寸 + 滚动 ─── */
+.mermaid,
+div[class*="language-mermaid"],
+pre.mermaid {
+    /* 固定尺寸容器 */
+    width: 100%;
+    max-width: 100%;
+    height: 600px;
+    max-height: 600px;
+    
+    /* 滚动配置 */
+    overflow: auto;
+    overflow-x: auto;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    
+    /* 视觉样式 */
+    margin: var(--space-xl) 0 !important;
+    padding: var(--space-lg) !important;
+    background: linear-gradient(135deg,
+        var(--bg-secondary) 0%,
+        var(--bg-tertiary) 100%) !important;
+    border-radius: var(--radius-xl) !important;
+    border: 2px solid var(--border-default) !important;
+    box-shadow: var(--shadow-lg),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+    
+    text-align: center !important;
+    position: relative !important;
+}
+
+/* Mermaid 容器悬停效果 */
+.mermaid:hover,
+div[class*="language-mermaid"]:hover {
+    border-color: var(--border-accent) !important;
+    box-shadow: var(--shadow-lg),
+        var(--shadow-glow),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    transition: all var(--transition-slow);
+}
+
+/* ─── 用户提示（移除无效提示）─── */
+/* 不显示任何提示，用户自然会使用滚动条 */
+
+/* ─── Mermaid 图表节点样式 ─── */
+
+/* 默认节点 - 圆角矩形 */
+.mermaid .node rect,
+.mermaid .node circle,
+.mermaid .node ellipse,
+.mermaid .node polygon {
+    fill: var(--bg-elevated) !important;
+    stroke: var(--accent-primary) !important;
+    stroke-width: 2px !important;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+    transition: all var(--transition-normal);
+}
+
+/* 节点悬停效果 */
+.mermaid .node:hover rect,
+.mermaid .node:hover circle,
+.mermaid .node:hover ellipse,
+.mermaid .node:hover polygon {
+    fill: var(--bg-tertiary) !important;
+    stroke: var(--accent-info) !important;
+    stroke-width: 3px !important;
+    filter: drop-shadow(0 4px 12px rgba(88, 166, 255, 0.4));
+}
+
+/* 节点文本样式 - 文字和正文一样大 */
+.mermaid .nodeLabel,
+.mermaid .node text,
+.mermaid .label,
+.mermaid text,
+.mermaid .edgeLabel text {
+    fill: var(--text-primary) !important;
+    color: var(--text-primary) !important;
+    font-family: var(--font-sans) !important;
+    font-size: 16px !important;  /* 和正文一样大 */
+    line-height: 1.6 !important;
+    font-weight: 500 !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* ─── 特殊节点类型样式 ─── */
+
+/* 开始节点 - 绿色 */
+.mermaid .node.start rect,
+.mermaid .node[class*="start"] rect,
+.mermaid .node[id*="Start"] rect,
+.mermaid .node[id*="start"] rect {
+    fill: rgba(63, 185, 80, 0.15) !important;
+    stroke: var(--accent-success) !important;
+    stroke-width: 2.5px !important;
+}
+
+/* 结束节点 - 红色 */
+.mermaid .node.end rect,
+.mermaid .node[class*="end"] rect,
+.mermaid .node[id*="Exit"] rect,
+.mermaid .node[id*="End"] rect,
+.mermaid .node[id*="end"] rect {
+    fill: rgba(248, 81, 73, 0.15) !important;
+    stroke: var(--accent-danger) !important;
+    stroke-width: 2.5px !important;
+}
+
+/* 决策节点 - 菱形 - 紫色 */
+.mermaid .node.decision polygon,
+.mermaid .node[class*="decision"] polygon {
+    fill: rgba(163, 113, 247, 0.15) !important;
+    stroke: var(--accent-secondary) !important;
+    stroke-width: 2.5px !important;
+}
+
+/* ─── 连接线样式 ─── */
+
+/* 默认连接线 */
+.mermaid .edgePath path.path,
+.mermaid .flowchart-link {
+    stroke: var(--accent-primary) !important;
+    stroke-width: 2px !important;
+    fill: none !important;
+    filter: drop-shadow(0 1px 3px rgba(88, 166, 255, 0.3));
+}
+
+/* 箭头样式 */
+.mermaid marker path,
+.mermaid .arrowheadPath {
+    fill: var(--accent-primary) !important;
+    stroke: none !important;
+}
+
+/* 连接线标签 */
+.mermaid .edgeLabel,
+.mermaid .edgeLabel .label {
+    background: var(--bg-elevated) !important;
+    padding: 4px 8px !important;
+    border-radius: var(--radius-sm) !important;
+    border: 1px solid var(--border-default) !important;
+    color: var(--text-secondary) !important;
+    fill: var(--text-secondary) !important;
+    font-size: 12px !important;
+}
+
+/* ─── 图表背景 ─── */
+
+/* ─── SVG：放大以确保文字清晰可读 ─── */
+.mermaid svg {
+    background: transparent !important;
+    
+    /* 放大 SVG 使文字接近 16px */
+    transform: scale(2.5) !important;
+    transform-origin: top left !important;
+    
+    /* 允许 SVG 超出容器（通过滚动查看） */
+    max-width: none !important;
+    max-height: none !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+/* ─── 滚动条美化 ─── */
+.mermaid::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+.mermaid::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+}
+
+.mermaid::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--bg-tertiary);
+    transition: background var(--transition-fast);
+}
+
+.mermaid::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-primary);
+}
+
+/* Firefox 滚动条 */
+.mermaid {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-default) var(--bg-tertiary);
+}
+
+/* ─── 响应式优化 ─── */
+@media (max-width: 768px) {
+    .mermaid {
+        height: 400px;
+        max-height: 400px;
+        padding: var(--space-md) !important;
+    }
+
+    .mermaid svg {
+        transform: none !important;
+    }
+
+    .mermaid .nodeLabel,
+    .mermaid .node text {
+        font-size: 15px !important;  /* 移动端稍小但仍清晰 */
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TABLE OF CONTENTS
+   ═══════════════════════════════════════════════════════════════════ */
+
+.toc, .markdown-toc {
+    background: var(--bg-secondary);
+    padding: var(--space-lg);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-default);
+    margin: var(--space-lg) 0;
+    box-shadow: var(--shadow-sm);
+}
+
+.toc-title, .markdown-toc-title {
+    font-weight: 600;
+    color: var(--accent-primary);
+    margin-bottom: var(--space-md);
+    font-size: 1.1em;
+}
+
+.toc ul, .markdown-toc ul {
+    list-style: none;
+    padding-left: var(--space-md);
+    margin: 0;
+}
+
+.toc li, .markdown-toc li {
+    margin: var(--space-xs) 0;
+}
+
+.toc a, .markdown-toc a {
+    color: var(--text-secondary);
+}
+
+.toc a:hover, .markdown-toc a:hover {
+    color: var(--accent-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SCROLLBAR STYLING
+   ═══════════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border-radius: var(--radius-full);
+    border: 2px solid var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   REDUCED MOTION (Accessibility)
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DIAGRAM ZOOM FUNCTIONALITY - 已删除无效功能
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* 所有无效的双击/右键提示已删除 */
+
+.diagram-fullscreen-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(13, 17, 23, 0.95) !important;
+    z-index: 9999 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 40px !important;
+    backdrop-filter: blur(10px);
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* 全屏模式下的流程图 */
+.diagram-fullscreen-overlay .mermaid {
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    overflow: auto !important;
+    margin: 0 !important;
+    box-shadow: var(--shadow-lg), 0 0 40px rgba(88, 166, 255, 0.3) !important;
+    border: 2px solid var(--accent-primary) !important;
+}
+
+/* 关闭按钮 */
+.diagram-fullscreen-close {
+    position: absolute !important;
+    top: 20px !important;
+    right: 20px !important;
+    width: 48px !important;
+    height: 48px !important;
+    background: var(--accent-danger) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 50% !important;
+    font-size: 24px !important;
+    font-weight: bold !important;
+    cursor: pointer !important;
+    z-index: 10000 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: all var(--transition-fast) !important;
+    box-shadow: var(--shadow-lg) !important;
+}
+
+.diagram-fullscreen-close:hover {
+    transform: scale(1.1) rotate(90deg) !important;
+    background: #ff6b6b !important;
+    box-shadow: 0 0 20px rgba(248, 81, 73, 0.5) !important;
+}
+
+/* 提示文本 */
+.diagram-fullscreen-hint {
+    position: absolute !important;
+    bottom: 30px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    color: var(--text-muted) !important;
+    font-size: 0.85rem !important;
+    background: var(--bg-elevated) !important;
+    padding: 8px 16px !important;
+    border-radius: var(--radius-full) !important;
+    border: 1px solid var(--border-default) !important;
+    z-index: 10001 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PRINT STYLES
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media print {
+    body {
+        background: #ffffff;
+        color: #1a1a1a;
+        padding: 20mm;
+        font-size: 11pt;
+        line-height: 1.5;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #1a1a1a;
+        page-break-after: avoid;
+    }
+    
+    h1 {
+        background: none;
+        -webkit-text-fill-color: #1a1a1a;
+        border-bottom: 2px solid #333;
+    }
+    
+    a {
+        color: #1a1a1a;
+        text-decoration: underline;
+    }
+    
+    a[href^="http"]::after {
+        content: " (" attr(href) ")";
+        font-size: 0.8em;
+        color: #666;
+    }
+    
+    pre, code {
+        background: #f5f5f5;
+        border-color: #ddd;
+        color: #333;
+    }
+    
+    pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    
+    table {
+        border-color: #333;
+    }
+    
+    thead {
+        background: #f0f0f0;
+    }
+    
+    blockquote {
+        background: #f9f9f9;
+        border-left-color: #333;
+    }
+    
+    img {
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+    
+    hr {
+        background: #333;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE DESIGN
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+    body {
+        padding: var(--space-md);
+        font-size: 15px;
+    }
+    
+    h1 {
+        font-size: 2rem;
+    }
+    
+    h2 {
+        font-size: 1.5rem;
+    }
+    
+    h3 {
+        font-size: 1.25rem;
+    }
+    
+    pre {
+        padding: var(--space-md);
+        font-size: 0.85rem;
+        border-radius: var(--radius-md);
+    }
+    
+    table {
+        font-size: 0.9rem;
+        display: block;
+        overflow-x: auto;
+    }
+    
+    th, td {
+        padding: var(--space-sm) var(--space-md);
+    }
+    
+    blockquote {
+        padding: var(--space-md);
+        margin-left: 0;
+        margin-right: 0;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SPECIAL ENHANCEMENTS
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Callout boxes via blockquote variants */
+blockquote > p:first-child > strong:first-child {
+    display: inline-block;
+    margin-bottom: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    background: rgba(88, 166, 255, 0.15);
+    border-radius: var(--radius-sm);
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Warning callout */
+blockquote:has(> p:first-child > strong:first-child) {
+    border-left-color: var(--accent-warning);
+}
+
+blockquote:has(> p:first-child > strong:first-child)::before {
+    color: var(--accent-warning);
+}
+
+/* Tip callout */
+blockquote:has(> p:first-child > em:first-child) {
+    border-left-color: var(--accent-success);
+    background: rgba(63, 185, 80, 0.05);
+}
+
+/* Danger callout */
+blockquote:has(> p:first-child > del:first-child) {
+    border-left-color: var(--accent-danger);
+    background: rgba(248, 81, 73, 0.05);
+}
+
+/* Abbreviation */
+abbr[title] {
+    text-decoration: underline dotted var(--accent-primary);
+    cursor: help;
+}
+
+/* Subscript & Superscript */
+sub, sup {
+    font-size: 0.75em;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+}
+
+sup {
+    top: -0.5em;
+}
+
+sub {
+    bottom: -0.25em;
+}
+
+/* Details/Summary */
+details {
+    margin: var(--space-lg) 0;
+    padding: var(--space-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+}
+
+summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--accent-primary);
+    padding: var(--space-sm);
+    margin: calc(var(--space-sm) * -1);
+    border-radius: var(--radius-sm);
+    transition: background var(--transition-fast);
+}
+
+summary:hover {
+    background: var(--bg-tertiary);
+}
+
+details[open] summary {
+    margin-bottom: var(--space-md);
+}
+
+

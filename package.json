@@ -1,0 +1,59 @@
+{
+  "name": "dsh-v-explorer",
+  "description": "V 文件探索器 — VS Code 式右侧栏文件树 for DeepSeek Harness Web（会话工作目录浏览 / 右键打开目录 / 路径与区间引用插入会话 / Markdown·文本·代码浮窗预览 / HTML 默认浏览器打开）",
+  "version": "0.3.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/victor10035445/dsh-v-explorer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/victor10035445/dsh-v-explorer/issues"
+  },
+  "homepage": "https://github.com/victor10035445/dsh-v-explorer#readme",
+  "keywords": [
+    "dsh",
+    "deepseek-harness-web",
+    "file-explorer",
+    "bookmarks",
+    "markdown-preview"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/ref-shared.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node --check lib/index.js && node --check lib/client.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "markdown-it": "^14.1.0"
+  }
+}
