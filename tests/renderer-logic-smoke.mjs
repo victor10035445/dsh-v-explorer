@@ -76,14 +76,16 @@ const bd = bookmarksTabDefinition(t, { bookmark: stubIcon });
 eq(bd.kind, "bookmarks", "bookmarks kind");
 eq(bd.guide[0].order, 20, "bookmarks guide 顺序 20");
 
-const mdDef = readerMarkdownDefinition(t("rd.markdown"));
+const mdDef = readerMarkdownDefinition(() => t("rd.markdown"));
 eq(mdDef.id, READER_MARKDOWN_ID, "markdown renderer id");
 eq(mdDef.extensions.join(","), "md,markdown", "markdown extensions");
 eq(mdDef.priority, "extension", "markdown extension 胜默认");
 eq(mdDef.loading, "text-pages", "markdown loading text-pages");
-const jsonDef = readerJsonDefinition(t("rd.json"));
+eq(mdDef.title(), "T:rd.markdown", "markdown title 为 locale 函数（官方契约 () => string）");
+const jsonDef = readerJsonDefinition(() => t("rd.json"));
 eq(jsonDef.extensions.join(","), "json", "json extensions");
 eq(jsonDef.wrap, true, "json 消费 wrap");
+eq(jsonDef.title(), "T:rd.json", "json title 为 locale 函数");
 
 /* ---- 5. changes hub：follow 计数与归零 dispose ---- */
 {

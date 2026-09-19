@@ -11,7 +11,8 @@ export const RENDER_CHAR_LIMIT = 1_000_000;
 /** JSON 美化上限（字符数）。 */
 export const PRETTIFY_CHAR_LIMIT = 2_000_000;
 
-/** Markdown 渲染器定义元数据（extension 胜官方默认；title 走 locale NS）。 */
+/** Markdown 渲染器定义元数据（extension 胜官方默认；title 须为 () => string
+ *  的 locale 函数——官方 DocumentPreviewDefinition 契约，工具栏渲染时求值）。 */
 export function readerMarkdownDefinition(title) {
   return {
     id: READER_MARKDOWN_ID,
@@ -23,7 +24,7 @@ export function readerMarkdownDefinition(title) {
   };
 }
 
-/** JSON 渲染器定义元数据（wrap:true 消费官方 wrap 偏好）。 */
+/** JSON 渲染器定义元数据（wrap:true 消费官方 wrap 偏好；title 同上须为函数）。 */
 export function readerJsonDefinition(title) {
   return {
     id: READER_JSON_ID,

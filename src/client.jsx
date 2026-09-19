@@ -233,11 +233,13 @@ export function apply(ctx) {
     console.warn("[dsh-v-explorer] official sidebar faces unavailable, skipping:", missing.join(", "));
   }
 
-  /* 文档渲染器：Reader Pro markdown + JSON 美化（extension 胜默认）。 */
+  /* 文档渲染器：Reader Pro markdown + JSON 美化（extension 胜默认）。
+     官方契约（DocumentPreviewDefinition）：title 是 () => string 的 locale
+     函数——工具栏渲染时才求值；传字符串会在 selected.title() 处崩溃。 */
   if (previews) {
     try {
-      previews.register(readerMarkdownDefinition(t("rd.markdown")));
-      previews.register(readerJsonDefinition(t("rd.json")));
+      previews.register(readerMarkdownDefinition(() => t("rd.markdown")));
+      previews.register(readerJsonDefinition(() => t("rd.json")));
       ctx.slots.inject("sidebar.right.tab.document", () =>
         ctx.slots.register({ name: "sidebar.right.tab.document", key: READER_MARKDOWN_ID, locale: NS }, ReaderMarkdownBody)
       );
