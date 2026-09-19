@@ -85,6 +85,47 @@ try {
   assert(r.status === 2, `无解析路径应报环境不可用（2），实得 ${r.status}：${r.stderr}`);
   assert(r.stderr.includes("无法定位 DSH 安装"), "应输出「无法定位 DSH 安装」而非漂移指认");
 
+  /* 6. 新平台模块（0.1.5 起，非 0.1.2 seed）被 external 声明覆盖且落点存在 → 0。
+     stub 落点换一个 sidebar-right 形态的假包，声明 dsh.client + exports["./client"]。 */
+  const stubSb = join(temp, "stub-sb");
+  const stubSbPkg = join(stubSb, "@deepseek-ai", "dsh-client-ui-sidebar-right", "package.json");
+  mkdirSync(dirname(stubSbPkg), { recursive: true });
+  writeFileSync(
+    stubSbPkg,
+    JSON.stringify({
+      name: "@deepseek-ai/dsh-client-ui-sidebar-right",
+      dsh: { client: { platform: "web" } },
+      exports: { "./client": "./lib/client.js" }
+    })
+  );
+  const coveredSb = join(temp, "covered-sb");
+  mkdirSync(coveredSb, { recursive: true });
+  writeFileSync(join(coveredSb, "client.js"), 'require("@deepseek-ai/dsh-client-ui-sidebar-right/client");');
+  writeFileSync(
+    join(coveredSb, "package.json"),
+    JSON.stringify({
+      name: "fixture-covered-sb",
+      dsh: { client: { platform: "web", external: ["@deepseek-ai/dsh-client-ui-sidebar-right"] } }
+    })
+  );
+  r = run(join(coveredSb, "client.js"), join(coveredSb, "package.json"), { DSH_EXTRA_PKG_DIRS: stubSb });
+  assert(r.status === 0, `covered-sb（external 覆盖新平台模块）应通过，实得 ${r.status}：${r.stderr}`);
+
+  /* 7. 新平台模块 require 漏声明 → 1，指认说明符（同 stub 落点，去掉 external） */
+  const missingSb = join(temp, "missing-sb");
+  mkdirSync(missingSb, { recursive: true });
+  writeFileSync(join(missingSb, "client.js"), 'require("@deepseek-ai/dsh-client-ui-sidebar-right/client");');
+  writeFileSync(
+    join(missingSb, "package.json"),
+    JSON.stringify({ name: "fixture-missing-sb", dsh: { client: { platform: "web" } } })
+  );
+  r = run(join(missingSb, "client.js"), join(missingSb, "package.json"), { DSH_EXTRA_PKG_DIRS: stubSb });
+  assert(r.status === 1, `missing-sb（漏声明）应漂移失败（1），实得 ${r.status}：${r.stderr}`);
+  assert(
+    r.stderr.includes("@deepseek-ai/dsh-client-ui-sidebar-right/client"),
+    "错误消息应指认该说明符"
+  );
+
   /* 真实产物可用性：lib/client.js 存在即对真实 bundle 跑一次（结果不判定，仅确认可执行不抛异常路径） */
   const realBundle = join(root, "lib", "client.js");
   if (existsSync(realBundle)) {

@@ -1,20 +1,19 @@
 /**
- * dsh-v-explorer 宿主端冒烟测试：
+ * dsh-v-explorer 宿主端冒烟测试（官方侧栏接管形态）：
  * 把 lib/index.js 的 execFile 换成桩后动态 import，用临时目录 + mock ctx
  * 驱动路由 handler，验证：
- *  1. list：目录列表、目录优先排序、隐藏项标记、路径逃逸 403
- *  2. file：文本读取、二进制拒绝、10MB 截断
- *  3. open：路径逃逸 403（不真开 explorer）；未知会话 404
- *  4. open-browser：html → 200 + file:// URL（exec 已打桩，不会真开浏览器）；
+ *  1. 退役路由：/list 与 /file 一律 404（目录/读取由官方 workspaceFiles Remote 承担）
+ *  2. open：路径逃逸 403（不真开 explorer）；未知会话 404
+ *  3. open-browser：html → 200 + file:// URL（exec 已打桩，不会真开浏览器）；
  *     非 html / 目录 → 400；逃逸 → 403；不存在 → 404
- *  5. snapshot：选区物化到 .dsh-v-explorer/refs/（经 .git/info/exclude 隐身）、空内容 400、未知会话 404
- *  6. pre-step 摘录捕获：引用 token → 原消息后附加冻结摘录上下文；无引用零开销
+ *  4. snapshot：选区物化到 .dsh-v-explorer/refs/（经 .git/info/exclude 隐身）、空内容 400、未知会话 404
+ *  5. pre-step 摘录捕获：引用 token → 原消息后附加冻结摘录上下文；无引用零开销
  *     通过；注入消息不重复处理；逃逸路径降级为「未捕获」说明而不失败整轮
- *  7. events：SSE 握手（content-type/retry）→ 目录变更去抖后广播 fs-changed
- *     （真实 fs.watch）→ 连接关闭后 watcher 释放、不再广播；未知会话 404
- *  8. 持久层兜底：live store 查不到的会话（重启窗口期）从 sessionPersistence
- *     快照 header 解析 cwd，/list 与 /events 都可用；两边都没有仍 404
- *  9. cordis 语义守卫：mock ctx 模拟 Context 代理——服务必须经插件 inject
+ *  6. events：SSE 握手（content-type/retry）；书签增删广播 bookmarks-changed；
+ *     连接关闭后不再广播；未知会话 404（fs.watch / fs-changed 已退役）
+ *  7. 持久层兜底：live store 查不到的会话（重启窗口期）从 sessionPersistence
+ *     快照 header 解析 cwd，/bookmarks 与 /events 都可用；两边都没有仍 404
+ *  8. cordis 语义守卫：mock ctx 模拟 Context 代理——服务必须经插件 inject
  *     声明才可取、未声明同步抛（漏声明 sessionPersistence 曾让兜底永不生效）
  */
 const fs = require("node:fs");
@@ -25,11 +24,8 @@ const { pathToFileURL } = require("node:url");
 /* ---------- 临时工作目录 ---------- */
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dve-test-"));
 fs.writeFileSync(path.join(tmp, "readme.md"), "# hello\n\nworld\n");
-fs.writeFileSync(path.join(tmp, "data.bin"), Buffer.from([0x00, 0x01, 0x02]));
 fs.writeFileSync(path.join(tmp, "index.html"), "<!doctype html><html><body>hi</body></html>\n");
 fs.mkdirSync(path.join(tmp, "sub"));
-fs.writeFileSync(path.join(tmp, "sub", "big.txt"), "x".repeat(11 * 1024 * 1024));
-fs.mkdirSync(path.join(tmp, ".hidden"));
 /* git 仓库形态：snapshot 的 ensureGitExcluded 只在 .git 存在时写排除条目 */
 fs.mkdirSync(path.join(tmp, ".git", "info"), { recursive: true });
 
@@ -50,8 +46,7 @@ const routes = new Map();
 const handlers = {};
 /* 服务袋：真实宿主里服务不是插件 ctx 的自有属性，必须经插件 inject 声明才能
    从 Context 代理上取到。本 mock 复刻该语义——未声明的服务取值同步抛
-   "cannot get property ... without inject"（0.3.0 的 sessionPersistence 漏声明
-   在普通对象 mock 下测不出来：普通对象取值不抛，兜底 404 一路绿灯）。 */
+   "cannot get property ... without inject"。 */
 const services = {
   sessions: { get: (id) => (id === "s1" ? { header: { cwd: tmp } } : undefined) },
   webServer: { register: (route) => { routes.set(route.path, route.handler); return () => {}; } },
@@ -130,39 +125,11 @@ let handler = null;
   handler = routes.get("/api/dsh-v-explorer");
   if (!handler) throw new Error("route not registered");
 
-  /* list 根目录 */
+  /* ── 退役路由：/list 与 /file 一律 404 ── */
   let r = await request("GET", "http://x/api/dsh-v-explorer/list?sessionId=s1");
-  if (r.status !== 200) throw new Error("list failed: " + JSON.stringify(r.body));
-  const names = r.body.entries.map((e) => e.name);
-  for (const expect of ["readme.md", "sub", ".hidden"]) {
-    if (!names.includes(expect)) throw new Error("entries missing " + expect + ": " + names);
-  }
-  if (r.body.entries[0].isDir !== true) throw new Error("dirs should sort first");
-  if (r.body.entries[r.body.entries.length - 1].isDir !== false) throw new Error("files should sort after dirs");
-  if (r.body.entries.find((e) => e.name === ".hidden").hidden !== true) throw new Error("hidden flag missing");
-
-  /* list 子目录 */
-  r = await request("GET", "http://x/api/dsh-v-explorer/list?sessionId=s1&path=" + encodeURIComponent("sub"));
-  if (r.status !== 200 || r.body.entries[0].name !== "big.txt") throw new Error("subdir list failed");
-
-  /* 路径逃逸 → 403 */
-  r = await request("GET", "http://x/api/dsh-v-explorer/list?sessionId=s1&path=" + encodeURIComponent("..\\..\\etc"));
-  if (r.status !== 403) throw new Error("escape must 403, got " + r.status);
-  r = await request("GET", "http://x/api/dsh-v-explorer/list?sessionId=s1&path=" + encodeURIComponent("C:\\Windows"));
-  if (r.status !== 403) throw new Error("absolute must 403, got " + r.status);
-
-  /* file：md 文本 */
+  if (r.status !== 404) throw new Error("retired /list must 404, got " + r.status);
   r = await request("GET", "http://x/api/dsh-v-explorer/file?sessionId=s1&path=readme.md");
-  if (r.status !== 200 || r.body.content !== "# hello\n\nworld\n") throw new Error("md read failed: " + JSON.stringify(r.body));
-  if (r.body.name !== "readme.md") throw new Error("name missing");
-
-  /* file：二进制拒绝 */
-  r = await request("GET", "http://x/api/dsh-v-explorer/file?sessionId=s1&path=data.bin");
-  if (r.status !== 200 || r.body.binary !== true) throw new Error("binary detect failed");
-
-  /* file：10MB 截断 */
-  r = await request("GET", "http://x/api/dsh-v-explorer/file?sessionId=s1&path=" + encodeURIComponent("sub/big.txt"));
-  if (r.status !== 200 || r.body.truncated !== true || r.body.content.length !== 10 * 1024 * 1024) throw new Error("truncation failed");
+  if (r.status !== 404) throw new Error("retired /file must 404, got " + r.status);
 
   /* open：路径逃逸 → 403（不真开窗口） */
   r = await request("POST", "http://x/api/dsh-v-explorer/open", { sessionId: "s1", path: ".." });
@@ -185,8 +152,8 @@ let handler = null;
   r = await request("POST", "http://x/api/dsh-v-explorer/open-browser", { sessionId: "s1", path: "nope.html" });
   if (r.status !== 404) throw new Error("missing html must 404, got " + r.status);
 
-  /* 未知会话 → 404 */
-  r = await request("GET", "http://x/api/dsh-v-explorer/list?sessionId=nope");
+  /* 未知会话 → 404（open-browser 路径上的会话解析） */
+  r = await request("POST", "http://x/api/dsh-v-explorer/open-browser", { sessionId: "nope", path: "index.html" });
   if (r.status !== 404) throw new Error("unknown session must 404");
 
   /* snapshot：会话选区物化到 .dsh-v-explorer/refs/，返回引用所需的路径与行数 */
@@ -224,7 +191,7 @@ let handler = null;
   /* 无引用消息原样通过（同一数组引用，零开销路径） */
   const plain = { id: "m2", role: "user", source: { kind: "user" }, content: [{ type: "text", text: "你好" }] };
   const d2 = await preStep({ agent, signal: undefined }, async () => ({ kind: "enter", messages: [plain] }));
-  if (d2.messages !== d2.messages || d2.messages.length !== 1) throw new Error("plain message must pass through");
+  if (d2.messages.length !== 1) throw new Error("plain message must pass through");
   if (d2.messages[0] !== plain) throw new Error("plain message identity must be preserved");
 
   /* 非直接用户消息（注入上下文等）不解析引用 */
@@ -238,13 +205,13 @@ let handler = null;
   if (d4.messages.length !== 2) throw new Error("escape ref must still attach a context message");
   if (!d4.messages[1].content[0].text.includes("未捕获")) throw new Error("escape ref must degrade with a note");
 
-  /* ---------- events：SSE 变更推送 ---------- */
+  /* ---------- events：SSE（仅书签同步） ---------- */
 
   /* events：未知会话 → 404（json 短响应，request() 兼容） */
   r = await request("GET", "http://x/api/dsh-v-explorer/events?sessionId=nope");
   if (r.status !== 404) throw new Error("events unknown session must 404, got " + r.status);
 
-  /* events：连接 → SSE 头 + retry 握手（fs.watch 不落桩，走真实监听） */
+  /* events：连接 → SSE 头 + retry 握手 */
   function openEventStream(sessionId) {
     return new Promise((resolvePromise, reject) => {
       const writes = [];
@@ -269,34 +236,45 @@ let handler = null;
   if (!String(stream.res.headers["content-type"]).includes("text/event-stream")) throw new Error("events content-type wrong");
   if (!stream.writes.some((w) => w.startsWith("retry:"))) throw new Error("events retry hint missing");
 
-  /* 目录变更 → 去抖（500ms）后广播 fs-changed */
+  /* 文件写入不再触发任何广播（fs-changed 已退役） */
   fs.writeFileSync(path.join(tmp, "watched.txt"), "hello\n");
-  await new Promise((resolve2) => setTimeout(resolve2, 1600));
-  if (!stream.writes.some((w) => w.includes("fs-changed"))) throw new Error("fs-changed not broadcast: " + JSON.stringify(stream.writes));
+  await new Promise((resolve2) => setTimeout(resolve2, 900));
+  if (stream.writes.some((w) => w.includes("fs-changed"))) throw new Error("fs-changed must be retired");
+  if (stream.writes.length !== 2) throw new Error("no data frames expected after handshake, got " + JSON.stringify(stream.writes));
 
-  /* 连接关闭 → watcher 释放，后续变更不再广播 */
+  /* 书签加入 → 立即广播 bookmarks-changed */
   const writesBefore = stream.writes.length;
+  r = await request("POST", "http://x/api/dsh-v-explorer/bookmark-add", { sessionId: "s1", path: "readme.md" });
+  if (r.status !== 200 || r.body.ok !== true) throw new Error("bookmark-add failed: " + JSON.stringify(r.body));
+  await new Promise((resolve2) => setTimeout(resolve2, 200));
+  if (!stream.writes.slice(writesBefore).some((w) => w.includes("bookmarks-changed"))) {
+    throw new Error("bookmarks-changed not broadcast: " + JSON.stringify(stream.writes));
+  }
+
+  /* 连接关闭 → 不再广播 */
   stream.res.closeHandler();
-  fs.writeFileSync(path.join(tmp, "watched.txt"), "hello again\n");
-  await new Promise((resolve2) => setTimeout(resolve2, 1200));
-  if (stream.writes.length !== writesBefore) throw new Error("closed connection still received events");
+  const writesAfterClose = stream.writes.length;
+  r = await request("POST", "http://x/api/dsh-v-explorer/bookmark-remove", { sessionId: "s1", path: "readme.md" });
+  if (r.status !== 200) throw new Error("bookmark-remove failed");
+  await new Promise((resolve2) => setTimeout(resolve2, 200));
+  if (stream.writes.length !== writesAfterClose) throw new Error("closed connection still received events");
 
   /* ---------- 持久层兜底：重启窗口期 live store 查不到会话 ---------- */
   const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), "dve-restore-"));
-  fs.writeFileSync(path.join(tmp2, "restored.txt"), "restored\n");
+  fs.writeFileSync(path.join(tmp2, "restored.md"), "restored\n");
   /* 会话 s2 不在 live store（sessions.get 查不到），只在持久化快照 header 里。 */
   ctx.sessionPersistence = {
     listSnapshots: async () => [{ header: { id: "s2", cwd: tmp2 }, revision: 1 }]
   };
-  r = await request("GET", "http://x/api/dsh-v-explorer/list?sessionId=s2");
+  r = await request("GET", "http://x/api/dsh-v-explorer/bookmarks?sessionId=s2");
   if (r.status !== 200) throw new Error("persisted cwd fallback failed: " + JSON.stringify(r.body));
-  if (!r.body.entries.some((e) => e.name === "restored.txt")) throw new Error("persisted fallback wrong entries");
+  if (!Array.isArray(r.body.bookmarks)) throw new Error("persisted fallback wrong shape");
 
   /* /events 同样走兜底；live 与持久层都没有的会话仍 404 */
   const stream2 = await openEventStream("s2");
   if (stream2.res.status !== 200) throw new Error("events persisted fallback must 200, got " + String(stream2.res.status));
   stream2.res.closeHandler();
-  r = await request("GET", "http://x/api/dsh-v-explorer/list?sessionId=nope2");
+  r = await request("GET", "http://x/api/dsh-v-explorer/bookmarks?sessionId=nope2");
   if (r.status !== 404) throw new Error("unknown session (with persistence) must 404, got " + r.status);
 
   clearInterval(keepAlive);

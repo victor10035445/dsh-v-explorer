@@ -14,8 +14,8 @@
  *  8. 409：version 高于支持版本时 GET 兼容 / 增删拒写
  *  9. 增删响应体携带更新后的书签数组（客户端免二次 GET）
  * 10. 并发 add 不互吞（每 cwd 写队列串行化）
- * 11. SSE：书签增删广播 bookmarks-changed；书签/快照写入不触发 fs-changed
- *     （.dsh-v-explorer/ 子树过滤），普通文件写入仍触发
+ * 11. SSE：书签增删广播 bookmarks-changed；fs-changed 已退役——任何文件写入
+ *     与 .dsh-v-explorer/ 写入都不再产生任何广播帧
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -222,26 +222,20 @@ let handler = null;
   const stream = await openEventStream("s1");
   expect(stream.res.status === 200, "events must 200");
 
-  /* add → bookmarks-changed；且书签写入（.dsh-v-explorer/）不引发 fs-changed */
+  /* add → bookmarks-changed */
   let marked = stream.writes.length;
   r = await add("index.html");
   expect(r.status === 200 && r.body.bookmarks.length === 2, "add index.html failed");
   expect(stream.writes.slice(marked).some((w) => w.includes("bookmarks-changed")), "bookmarks-changed not broadcast");
-  await wait(1600);
-  expect(!stream.writes.slice(marked).some((w) => w.includes("fs-changed")), "bookmark write must NOT trigger fs-changed: " + JSON.stringify(stream.writes.slice(marked)));
 
-  /* 普通文件写入仍触发 fs-changed（过滤不过度） */
+  /* fs-changed 已退役：普通文件写入与快照写入都不再产生任何广播帧 */
   marked = stream.writes.length;
   fs.writeFileSync(path.join(tmp, "watched.txt"), "hello\n");
-  await wait(1600);
-  expect(stream.writes.slice(marked).some((w) => w.includes("fs-changed")), "normal write must still broadcast fs-changed");
-
-  /* snapshot 写 .dsh-v-explorer/refs/ 同样不触发 fs-changed（顺带修复的同类抖动） */
-  marked = stream.writes.length;
   r = await api("POST", "/snapshot", { sessionId: "s1", content: "snap" });
   expect(r.status === 200, "snapshot failed");
-  await wait(1600);
-  expect(!stream.writes.slice(marked).some((w) => w.includes("fs-changed")), "snapshot write must NOT trigger fs-changed");
+  await wait(900);
+  expect(stream.writes.length === marked, "no broadcast frames expected for fs writes: " + JSON.stringify(stream.writes.slice(marked)));
+  expect(!stream.writes.some((w) => w.includes("fs-changed")), "fs-changed must be retired");
 
   /* remove 实际移除 → 广播；幂等 remove → 不广播 */
   marked = stream.writes.length;

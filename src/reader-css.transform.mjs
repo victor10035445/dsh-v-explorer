@@ -4,13 +4,15 @@
  * `src/markdown-reader-pro.css` 原本也给 VS Code / PyCharm 整页预览用的全局样式
  * （:root/html/body/全局滚动条）。本插件把它装进一个浮动预览窗里，必须：
  *
- *  1. 作用域化——所有选择器收进预览窗，绝不泄漏到宿主页面：
- *     - `:root`（设计令牌）→ `.dve-preview`（挂在浮窗根上，窗口镶边共用）
- *     - `html`（scroll-behavior）→ `.dve-previewBody`（滚动容器）
+ *  1. 作用域化——所有选择器收进渲染器体，绝不泄漏到宿主页面：
+ *     - `:root`（设计令牌）→ `.dve-rp`（挂在渲染器体根元素上，官方预览 tab
+ *       的 body 由本插件渲染器接管）
+ *     - `html`（scroll-behavior）→ `.dve-rpBody`（渲染器自己的滚动容器，
+ *       经 scrollportRef 交给官方宿主托管 load-more）
  *     - `body`（正文排版）→ `.dve-md`；并过滤掉 max-width/margin/padding
- *       （整页版式由浮窗自己控制留白）
+ *       （整页版式由渲染器体自己控制留白）
  *     - 其余选择器一律加 `.dve-md ` 前缀；裸 `::-webkit-scrollbar*` 同时
- *       交给 `.dve-previewBody` 与 `.dve-md` 两个滚动宿主
+ *       交给 `.dve-rpBody` 与 `.dve-md` 两个滚动宿主
  *  2. 裁剪——本插件渲染不出来/不适用的段落直接丢弃（见 DROP_SELECTOR）：
  *     mermaid / TOC / KaTeX·math / 全屏 diagram 浮层 / @media print /
  *     原生 `input[type="checkbox"]`（任务列表改由 li 类 + ::before 绘制，
@@ -65,11 +67,11 @@ function readBlock(source, i) {
 
 /** 单个选择器 → 作用域化后的选择器数组。 */
 function mapSelector(selector) {
-  if (selector === ":root") return [".dve-preview"];
-  if (selector === "html") return [".dve-previewBody"];
+  if (selector === ":root") return [".dve-rp"];
+  if (selector === "html") return [".dve-rpBody"];
   if (selector === "body") return [".dve-md"];
   if (/^::-webkit-scrollbar/.test(selector)) {
-    return [".dve-previewBody" + selector, ".dve-md" + selector];
+    return [".dve-rpBody" + selector, ".dve-md" + selector];
   }
   return [".dve-md " + selector];
 }
