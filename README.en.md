@@ -68,6 +68,17 @@ dsh plugin --profile web add "<absolute path to the tgz>"
 
 `add` registers `dsh-v-explorer` into the profile's bundle list. **Restart `dsh web`** afterwards and refresh the page.
 
+> **Minimum DSH version: 0.1.2-rc.1**. The client's `defineStore` comes from the
+> platform seed word `@deepseek-ai/dsh-client-store` (0.1.2-rc.1 dismantled the
+> old `dsh-client-runtime` monolith); v0.3.0 and earlier fail to load on
+> 0.1.2-rc.1 with
+> `require("@deepseek-ai/dsh-client-runtime/client") missed the module table`.
+> For an already-installed environment you can also re-register directly via the
+> profile patch layer: add
+> `- insert: [{id: dsh-v-explorer, name: dsh-v-explorer}]` to
+> `~/.dsh/profiles/web/cordis.patch.yml`
+> (web template `patchReload: live` — saving hot-reloads, no restart needed).
+
 ## Build from source
 
 `lib/` is committed, so installation needs no build; rebuild after changing sources:
@@ -75,7 +86,7 @@ dsh plugin --profile web add "<absolute path to the tgz>"
 ```sh
 pnpm install
 pnpm build        # esbuild: src/client.jsx → lib/client.js (factory form)
-pnpm check        # node --check on both entry points
+pnpm check        # node --check on both entry points + externals drift check (check-externals.mjs)
 ```
 
 ## Markdown preview theme (Markdown Reader Pro)
@@ -124,7 +135,8 @@ tests/                      runnable checks (Node, no browser)
 Validation commands (run each after changes/releases):
 
 ```
-pnpm check                          # syntax check lib/*.js
+pnpm check                          # syntax check lib/*.js + externals drift check (module-table compat)
+node tests/check-externals-smoke.mjs # externals checker self-verification (three fixtures + exit-code semantics)
 node tests/css-transform-smoke.mjs  # preview theme scope transform + render pipeline smoke
 node tests/previewers-smoke.mjs     # preview format registry + style interface smoke
 node tests/dock-yield-smoke.mjs     # dock yield boundary smoke

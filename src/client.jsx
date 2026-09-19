@@ -14,7 +14,7 @@
  *    聚焦、页面恢复可见、预览打开文件时同样静默补刷
  *  - 会话切换：订阅 sessions.list，current 变化即重置树并换 cwd
  *  - 右键菜单：打开所在目录 / 复制路径 / 插入到会话（官方 @path 引用语法，
- *    经 slash/input-insert-text 事件写进当前会话 composer）；html 文件另有
+ *    经会话 input facade 的 actions.setDraft 写进当前会话 composer）；html 文件另有
  *    「打开」——用系统默认浏览器按 file 协议打开（宿主端 /open-browser）
  *  - 书签面板：dock 上下分层（explorer flex:1 + 水平分隔条 ns-resize + 定高
  *    书签区，高度/收起记忆 localStorage）。书签 = 纯路径引用表 + 多根树视图
@@ -43,7 +43,7 @@
  *    × 从草稿移除
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { defineStore } from "@deepseek-ai/dsh-client-runtime/client";
+import { defineStore } from "@deepseek-ai/dsh-client-store";
 import MarkdownIt from "markdown-it";
 // 构建期由 build.mjs 从 src/markdown-reader-pro.css 变换注入（字符串）。
 import PREVIEW_CSS from "virtual:dve-reader-css";
@@ -170,42 +170,54 @@ function referenceOf(rel) {
 }
 
 /**
- * 把文本插入当前会话的 composer。
+ * 当前会话 composer 草稿的读写通道（0.1.2-rc.1 起 composer 是 shell 持有的
+ * Lexical contenteditable——旧 `textarea[data-phase]` DOM 钩子与
+ * `data-conversation-scroll` 容器属性均已不存在，textarea 原型 setter 路死路）。
  *
  * 不走 slash/input-insert-text 事件——它的 span 参数是 pick 时的 CAS 快照
- * （draftRev 必须与输入机当前状态一致），外部调用者读不到机器状态，必然失败。
- * 改走 DOM 层：对 composer 的 textarea（稳定钩子 data-phase 属性）用原型
- * setter 绕过 React 值追踪写入新值，再派发冒泡 input 事件——React onChange
- * 触发，输入机按「一次普通草稿变更」处理，等同真实键入。
+ * （facade.insertText 要求 span.draftRev === rev），外部调用者读不到机器
+ * 状态，必然失败。官方的程序化写入口是会话 input facade
+ * （conversation.input = InputHub → for(actx) → SessionInputShell）：
+ *   - actions.setDraft(text)  全量替换草稿——无 CAS，换行分段、光标落尾；
+ *     与旧 DOM「整体改写」语义等价（草稿内既有 chip 占位符同样会被消毒，
+ *     行为不劣于旧版整体改写）
+ *   - snapshot.draft          当前草稿的序列化文本（state 快照）
+ *   - state.subscribe         草稿变更订阅（chip 条的观察面）
+ * 会话作用域解析对齐官方 queueDockEntry：sessions.scope(id) → actx.get("conversation")。
  */
-const COMPOSER_TA = '[data-conversation-scroll] textarea[data-phase]';
-
-function findComposer() {
-  if (typeof document === "undefined") return null;
-  return document.querySelector(COMPOSER_TA) ?? document.querySelector("textarea[data-phase]");
+function inputFacade(ctx, sessionId) {
+  try {
+    if (ctx === undefined || sessionId === undefined) return null;
+    const actx = ctx.sessions?.scope?.(sessionId);
+    if (actx === undefined) return null;
+    const conversation = actx.get("conversation");
+    if (conversation === undefined || conversation.input === undefined) return null;
+    return conversation.input.for(actx);
+  } catch {
+    return null;
+  }
 }
 
-/** 用原型 setter + 冒泡 input 事件整体改写 composer 草稿（等同真实键入）。 */
-function setComposerValue(ta, value) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-  if (!setter) return false;
-  setter.call(ta, value);
-  ta.dispatchEvent(new Event("input", { bubbles: true }));
-  ta.focus();
-  ta.setSelectionRange(ta.value.length, ta.value.length);
+/** 当前会话草稿文本（facade 不可达返回 null）。 */
+function readDraft(ctx, sessionId) {
+  const facade = inputFacade(ctx, sessionId);
+  return facade === null ? null : facade.snapshot?.draft ?? "";
+}
+
+/** 全量写草稿；返回是否成功。 */
+function writeDraft(ctx, sessionId, text) {
+  const facade = inputFacade(ctx, sessionId);
+  if (facade === null) return false;
+  facade.actions.setDraft(text);
   return true;
 }
 
-function insertIntoComposer(text) {
-  try {
-    const ta = findComposer();
-    if (!ta || ta.disabled || ta.readOnly) return false;
-    const current = ta.value;
-    const glue = current.length > 0 && !/\s$/.test(current) ? " " : "";
-    return setComposerValue(ta, current + glue + text);
-  } catch {
-    return false;
-  }
+/** 追加一段文本到当前草稿落尾（等同真实键入的追加语义）。 */
+function appendToDraft(ctx, sessionId, text) {
+  const current = readDraft(ctx, sessionId);
+  if (current === null) return false;
+  const glue = current.length > 0 && !/\s$/.test(current) ? " " : "";
+  return writeDraft(ctx, sessionId, current + glue + text);
 }
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
@@ -853,21 +865,22 @@ function RefChipBar({ t, sessionId, openPreview, notify }) {
   const [, bumpValidity] = useState(0);
   const [pop, setPop] = useState(null); // { x, bottom, text }
 
-  /* 草稿观察：document 捕获 input（React 的 onChange 会派发原生 input 事件）。 */
+  /* 草稿观察：订阅会话 input facade 的状态快照（新版 composer 是 Lexical
+     contenteditable，textarea 的 input 事件已不存在；快照 store 的订阅回调
+     不携带参数，一律从 getSnapshot() 读）。 */
   useEffect(() => {
-    const onInput = (e) => {
-      if (e.target instanceof HTMLTextAreaElement && e.target.matches("textarea[data-phase]")) setDraft(e.target.value);
-    };
-    document.addEventListener("input", onInput, true);
-    return () => document.removeEventListener("input", onInput, true);
-  }, []);
+    const facade = inputFacade(ctxRef.current, sessionId);
+    if (facade === null) return undefined;
+    setDraft(facade.snapshot?.draft ?? "");
+    return facade.state?.subscribe?.(() => {
+      setDraft(facade.state.getSnapshot()?.draft ?? "");
+    });
+  }, [sessionId]);
 
-  /* 会话切换：重读草稿 + 清缓存。 */
+  /* 会话切换：清缓存；草稿由上面的 facade 订阅随作用域切换自动重读。 */
   useEffect(() => {
     cacheRef.current.clear();
     setPop(null);
-    const ta = findComposer();
-    if (ta) setDraft(ta.value);
   }, [sessionId]);
 
   const tokens = useMemo(() => parseRefTokens(draft), [draft]);
@@ -922,10 +935,10 @@ function RefChipBar({ t, sessionId, openPreview, notify }) {
 
   const chipRemove = (tk) => {
     setPop(null);
-    const ta = findComposer();
-    if (!ta || ta.value.slice(tk.index, tk.index + tk.raw.length) !== tk.raw) return;
-    const next = ta.value.slice(0, tk.index) + ta.value.slice(tk.index + tk.raw.length);
-    setComposerValue(ta, next.trimEnd() === "" ? "" : next);
+    const current = readDraft(ctxRef.current, sessionId);
+    if (current === null || current.slice(tk.index, tk.index + tk.raw.length) !== tk.raw) return;
+    const next = current.slice(0, tk.index) + current.slice(tk.index + tk.raw.length);
+    writeDraft(ctxRef.current, sessionId, next.trimEnd() === "" ? "" : next);
   };
 
   const chipHover = (tk, el) => {
@@ -1337,7 +1350,7 @@ function ExplorerDock(props) {
         notify(t("ex.toastOpened"), "ok");
       } else if (kind === "insert") {
         const ref = referenceOf(m.rel);
-        if (insertIntoComposer(ref)) {
+        if (appendToDraft(ctxRef.current, sessionId, ref)) {
           notify(t("ex.toastInserted"), "ok");
         } else {
           const copied = await copyText(ref);
@@ -1567,7 +1580,7 @@ function ExplorerDock(props) {
    * ------------------------------------------------------------------ */
 
   const sendRefToken = async (token) => {
-    if (insertIntoComposer(token)) {
+    if (appendToDraft(ctxRef.current, sessionId, token)) {
       notify(t("ex.toastRefInserted"), "ok");
       return;
     }
@@ -1620,7 +1633,7 @@ function ExplorerDock(props) {
       if (!text.trim()) return;
       const target = e.target instanceof Element ? e.target : null;
       if (!target) return;
-      if (target.closest(".dve-preview") || target.closest(".dve-dock") || target.closest("textarea, input")) return;
+      if (target.closest(".dve-preview") || target.closest(".dve-dock") || target.closest("[data-composer-input], textarea, input")) return;
       const scroll = document.querySelector("[data-conversation-scroll]");
       if (!scroll || !scroll.contains(target)) return;
       e.preventDefault();

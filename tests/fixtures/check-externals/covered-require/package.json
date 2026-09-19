@@ -1,0 +1,10 @@
+{
+  "name": "fixture-covered-require",
+  "private": true,
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-locale"]
+    }
+  }
+}

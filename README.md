@@ -68,6 +68,15 @@ dsh plugin --profile web add "<tgz 的绝对路径>"
 
 `add` 会把 `dsh-v-explorer` 注册进 profile 的 bundle 列表。装完**重启 `dsh web`**，刷新页面生效。
 
+> **最低 DSH 版本：0.1.2-rc.1**。客户端 `defineStore` 来自平台 seed word
+> `@deepseek-ai/dsh-client-store`（0.1.2-rc.1 拆解了旧的 `dsh-client-runtime`
+> 单体）；0.3.0 及更早版本在 0.1.2-rc.1 上会报
+> `require("@deepseek-ai/dsh-client-runtime/client") missed the module table`
+> 而无法加载。已装环境重装/启用也可以直接走 profile 补丁层：在
+> `~/.dsh/profiles/web/cordis.patch.yml` 加
+> `- insert: [{id: dsh-v-explorer, name: dsh-v-explorer}]`
+> （web 模板 `patchReload: live`，保存即热重载，无需重启）。
+
 ## 从源码构建
 
 lib/ 已随仓库提交，安装无需构建；改动源码后重新构建：
@@ -75,7 +84,7 @@ lib/ 已随仓库提交，安装无需构建；改动源码后重新构建：
 ```sh
 pnpm install
 pnpm build        # esbuild: src/client.jsx → lib/client.js（factory 形式）
-pnpm check        # node --check 两个入口
+pnpm check        # node --check 两个入口 + externals 漂移检查（check-externals.mjs）
 ```
 
 ## Markdown 预览主题（Markdown Reader Pro）
@@ -124,7 +133,8 @@ tests/                      可运行校验（Node，无浏览器）
 校验命令（发布/改动后逐条跑）：
 
 ```
-pnpm check                          # 语法检查 lib/*.js
+pnpm check                          # 语法检查 lib/*.js + externals 漂移检查（模块表适配）
+node tests/check-externals-smoke.mjs # externals 漂移检查器自验证（fixtures 三夹具 + 退码语义）
 node tests/css-transform-smoke.mjs  # 预览主题作用域变换 + 渲染管线冒烟
 node tests/previewers-smoke.mjs     # 预览格式注册表 + 样式接口冒烟
 node tests/dock-yield-smoke.mjs     # dock 让位量边界冒烟

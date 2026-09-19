@@ -1,0 +1,2 @@
+# 统一使用 LF 换行符，避免 Windows / 跨平台协作时出现 CRLF 混用
+* text=auto eol=lf
