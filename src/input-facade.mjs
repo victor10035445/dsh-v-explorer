@@ -10,22 +10,30 @@ export const ctxRef = { current: null };
 
 /**
  * 解析当前会话的 input facade。
+ *
+ * rc.2 形态（composer-integration）：`conversation.input` 是 SessionInputResolver
+ * ——`for(actx)` 解析出会话 facade（`setDraft` + `state: SnapshotStore<InputState>`，
+ * 草稿读 `state.getSnapshot().draft`）。旧形态（`input.actions` / input 本体直接带
+ * `setDraft` + `snapshot`）已随 composer 机器改形移除——右键「插入到会话」曾因
+ * setDraft 判空失败而恒走"不可达"降级。这里对两种形态都做适配（旧形态仅防御保留）。
+ *
  * @returns {{actions, snapshot, state}|null} facade 不可达返回 null（降级路径）
  */
 export function inputFacade(ctx, sessionId) {
   if (!ctx || sessionId === undefined) return null;
   try {
     const actx = ctx.sessions?.scope?.(sessionId);
-    const conversation = actx?.get?.("conversation");
-    const input = conversation?.input;
-    if (!input) return null;
-    const actions = input.actions ?? input;
-    if (typeof actions?.setDraft !== "function") return null;
-    return {
-      actions,
-      snapshot: typeof input.snapshot === "function" ? input.snapshot() : input.snapshot,
-      state: input.state
-    };
+    if (!actx) return null;
+    const input = actx.get?.("conversation")?.input;
+    const facade =
+      typeof input?.for === "function" ? input.for(actx)
+      : (typeof input?.actions?.setDraft === "function" ? input.actions : input);
+    if (typeof facade?.setDraft !== "function") return null;
+    const state = facade.state ?? null;
+    const snapshot =
+      state && typeof state.getSnapshot === "function" ? state.getSnapshot()
+      : (typeof facade.snapshot === "function" ? facade.snapshot() : facade.snapshot);
+    return { actions: facade, snapshot, state };
   } catch {
     return null;
   }

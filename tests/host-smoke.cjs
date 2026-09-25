@@ -262,9 +262,10 @@ let handler = null;
   /* ---------- 持久层兜底：重启窗口期 live store 查不到会话 ---------- */
   const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), "dve-restore-"));
   fs.writeFileSync(path.join(tmp2, "restored.md"), "restored\n");
-  /* 会话 s2 不在 live store（sessions.get 查不到），只在持久化快照 header 里。 */
+  /* 会话 s2 不在 live store（sessions.get 查不到），只在持久化快照 header 里。
+   * rc.2 服务面：`stat(id)` 按 id 观测（旧 `listSnapshots()` 已不存在）。 */
   ctx.sessionPersistence = {
-    listSnapshots: async () => [{ header: { id: "s2", cwd: tmp2 }, revision: 1 }]
+    stat: async (id) => (id === "s2" ? { header: { id: "s2", cwd: tmp2 }, revision: 1 } : undefined)
   };
   r = await request("GET", "http://x/api/dsh-v-explorer/bookmarks?sessionId=s2");
   if (r.status !== 200) throw new Error("persisted cwd fallback failed: " + JSON.stringify(r.body));

@@ -8,8 +8,11 @@
  * 行为：会话作用域书签列表（bookmarkRepo，本 tab 与 files 树身共享）；
  * 每个书签是子树的虚拟根，懒加载与展开状态按 absPath 独立；文件书签点击
  * openResource 进官方预览；目录书签点击展开；失效书签保留并删除线标记
- * （exists:false，重验即自动摘标）；变更流任意帧 + 可见性过渡 → 500ms 去抖
- * 重验（重验 = /bookmarks 重拉，宿主逐条 stat 重标 exists/isDir）。
+ * （exists:false，重验即自动摘标）。
+ * 变更同步（与 files 树身同一节奏、同一 changes-sync 编排）：ready/change 帧
+ * → absent 立即摘除 + 500ms 去抖（重验书签集 /bookmarks + 静默重拉全部展开的
+ * 书签子目录层——盘面更新原位呈现，不闪 loading）；focus/可见性过渡/tab 显隐
+ * 兜底直连；展开命中缓存层时静默重拉（收起期间的变更不滞留）。
  */
 import { useEffect, useSyncExternalStore, useRef } from "react";
 import { buildRowMenuItems, RowMenu, useRowMenu } from "./row-menu.jsx";
@@ -18,6 +21,7 @@ import { services } from "./services.mjs";
 import { fileAddressFor, joinWorkspacePath } from "./workspace-path.mjs";
 import { hasHiddenSegment, relFromAbs } from "./tree-utils.mjs";
 import { BOOKMARKS_TAB_ID, bookmarksTabDefinition } from "./tab-definitions.mjs";
+import { createChangeSync, pruneAbsentEntry } from "./changes-sync.mjs";
 import { failureLine } from "./files-tab.jsx";
 
 export { BOOKMARKS_TAB_ID, bookmarksTabDefinition };
@@ -85,6 +89,7 @@ export function BookmarksTabBody({ useTabInfo, sessionId, useSessions, t }) {
   const generationsRef = useRef(new Map());
   const visible = tab.visible !== false;
   const active = sessionId !== undefined && visible;
+  const refreshTickRef = useRef(null);
 
   const loadDir = (abs, silent = false) => {
     if (!active || cwd === undefined || cwd === null) return;
@@ -116,12 +121,23 @@ export function BookmarksTabBody({ useTabInfo, sessionId, useSessions, t }) {
       });
   };
 
+  /** 静默重拉全部展开的书签子目录层（变更流去抖后与可见性兜底共用）——
+   *  书签子树来源与文件目录相同，盘面更新 MUST 与文件树同步呈现。 */
+  const refreshExpanded = () => {
+    if (!active) return;
+    for (const abs of model.expanded) loadDir(abs, true);
+  };
+  refreshTickRef.current = refreshExpanded;
+
   /* 挂载/可见 → 拉书签（含 exists/isDir 重验）。 */
   useEffect(() => {
     if (!active) return undefined;
     bookmarkRepo.refresh(services.ctxRef.current, sessionId);
     const onVisible = () => {
-      if (document.visibilityState === "visible") bookmarkRepo.refresh(services.ctxRef.current, sessionId);
+      if (document.visibilityState === "visible") {
+        bookmarkRepo.refresh(services.ctxRef.current, sessionId);
+        refreshTickRef.current?.();
+      }
     };
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
@@ -131,19 +147,30 @@ export function BookmarksTabBody({ useTabInfo, sessionId, useSessions, t }) {
     };
   }, [sessionId, visible, cwd]);
 
-  /* 变更流任意帧 → 500ms 去抖重验（对齐 files 树身的刷新节奏）。 */
+  /* 变更流：ready/change → absent 立即摘除 + 500ms 去抖（重验书签集 + 静默重拉
+     全部展开的书签子目录层；编排在 changes-sync 共用模块，files 树身同款）。 */
   useEffect(() => {
     if (!active || !services.hub) return undefined;
-    let timer = null;
-    const unsubscribe = services.hub.follow(sessionId, () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => bookmarkRepo.refresh(services.ctxRef.current, sessionId), 500);
+    const sync = createChangeSync({
+      follow: services.hub.follow,
+      sessionId,
+      onAbsent: (absolutePath) => {
+        if (pruneAbsentEntry(model.levels, absolutePath)) bmBump(model);
+      },
+      onRefresh: () => {
+        bookmarkRepo.refresh(services.ctxRef.current, sessionId);
+        refreshExpanded();
+      }
     });
-    return () => {
-      unsubscribe();
-      if (timer) clearTimeout(timer);
-    };
+    return () => sync.dispose();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [sessionId, visible]);
+
+  /* tab 显隐过渡：隐藏→可见补刷一次（收起期间错过的变更）。 */
+  useEffect(() => {
+    if (visible) refreshTickRef.current?.();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [visible]);
 
   const toggleDir = (abs) => {
     if (model.expanded.has(abs)) {
@@ -153,7 +180,9 @@ export function BookmarksTabBody({ useTabInfo, sessionId, useSessions, t }) {
     }
     model.expanded.add(abs);
     bmBump(model);
-    if (!model.levels.has(abs)) loadDir(abs);
+    /* 无层走 loading 首拉；命中缓存层则静默重拉——收起期间的变更不滞留，
+       缓存内容原位刷新（silent 对无层与有层分别自然落到两种形态）。 */
+    loadDir(abs, true);
   };
 
   const openFile = (abs) => {

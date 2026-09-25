@@ -12,8 +12,10 @@
  *    sidebar.right.pane.tab 座。官方树的下拉仍在，可切回
  *  - 变更流：workspaceFiles.changes 的插件单点订阅（官方 ChangeFeed 私有），
  *    每会话至多一条，树身/书签共享，可见才订阅、归零即 dispose
- *  - 自动展开：新会话幂等 openTab("files")；手动收起记忆在
- *    "dsh-v-explorer:sidebarClosed"（再手动展开即清除）
+ *  - 自动展开：进入会话幂等落出 files + bookmarks 两页（最常用常开，files 保持
+ *    前台）；无跨会话关闭记忆——手动收起仅作用于当前会话（specs/sidebar-auto-open）
+ *  - 默认宽度：装配时把右栏保存偏好预置为契约最小 300px（layout panels 绑定
+ *    动作，官方同路写入），首开 45% 播种不再生效；会话内拖拽宽度由官方承接
  *  - 引用体系（保留项）：composer chip 条（conversation.input.dock）点击改走
  *    官方 openResource（降级复制）；会话窗口框选→引用；宿主 /snapshot 快照
  *    与 pre-step 摘录不变
@@ -32,8 +34,9 @@ import { bookmarkRepo } from "./bookmark-repo.mjs";
 import { installConversationSelection, OverlayUi } from "./ui-bus.jsx";
 import { createRowActions } from "./row-menu.jsx";
 import { installAutoOpen } from "./auto-open.mjs";
+import { installRightbarDefaultWidth } from "./rightbar-width.mjs";
 import { RefChipBar } from "./chips.jsx";
-import { filesTabDefinition, FilesTabBody, FILES_TAB_ID, GuideFolderGlyph } from "./files-tab.jsx";
+import { filesTabDefinition, FilesTabBody, FILES_TAB_ID, GuideFolderGlyph, hookBookmarkVersion } from "./files-tab.jsx";
 import { bookmarksTabDefinition, BookmarksTabBody, BOOKMARKS_TAB_ID, GuideBookmarkGlyph } from "./bookmarks-tab.jsx";
 import { readerMarkdownDefinition, ReaderMarkdownBody, READER_MARKDOWN_ID } from "./reader-markdown.jsx";
 import { readerJsonDefinition, ReaderJsonBody, READER_JSON_ID } from "./reader-json.jsx";
@@ -48,6 +51,7 @@ export const inject = [
   "slots",
   "locale",
   "sessions",
+  "layout",
   "sidebarRightTabs",
   "sidebarRight",
   "documentPreviews",
@@ -220,6 +224,10 @@ export function apply(ctx) {
 
   installStyles(ctx);
 
+  /* 右栏默认宽度落定契约最小值（独立于页型接管面——降级形态同样生效；
+   * 形状探测缺席即 warn 跳过，见 src/rightbar-width.mjs）。 */
+  installRightbarDefaultWidth(ctx);
+
   /* 注册面探测（design D9：缺席即静默跳过对应面，一次 warn）。 */
   const previews = ctx.documentPreviews;
   const tabs = ctx.sidebarRightTabs;
@@ -270,6 +278,8 @@ export function apply(ctx) {
         ctx.slots.register({ name: "sidebar.right.pane.tab.title", key: BOOKMARKS_TAB_ID, locale: NS }, BookmarksTabTitle)
       );
       provideServices({ hub: createChangesHub(() => ctxRef.current?.remote) });
+      /* ★ 角标随书签仓库变化实时刷新（files-tab 的 repo→版本号桥，装一次）。 */
+      hookBookmarkVersion();
       installAutoOpen(ctx, ctxRef);
     } catch (error) {
       console.warn("[dsh-v-explorer] sidebar page registration skipped:", error);

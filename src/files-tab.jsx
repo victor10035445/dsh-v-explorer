@@ -16,6 +16,7 @@ import { bookmarkRepo } from "./bookmark-repo.mjs";
 import { services } from "./services.mjs";
 import { fileAddressFor, joinWorkspacePath } from "./workspace-path.mjs";
 import { compareEntries, hasHiddenSegment, relFromAbs } from "./tree-utils.mjs";
+import { createChangeSync, pruneAbsentEntry } from "./changes-sync.mjs";
 import { FILES_TAB_ID, filesTabDefinition } from "./tab-definitions.mjs";
 
 export { FILES_TAB_ID, filesTabDefinition };
@@ -171,36 +172,17 @@ export function FilesTabBody({ useTabInfo, sessionId, useSessions, t }) {
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [sessionId, root]);
 
-  /* 变更流：可见才订阅；ready=基线就位补刷一次；change=absent 即时摘除 + 500ms 去抖静默重拉。 */
+  /* 变更流：可见才订阅；ready=基线就位补刷一次；change=absent 即时摘除 + 500ms
+     去抖静默重拉（编排在 changes-sync 共用模块，书签 tab 同款语义）。 */
   useEffect(() => {
     if (!active || !services.hub) return undefined;
-    const absent = (absolutePath) => {
-      let touched = false;
-      for (const [abs, level] of model.levels) {
-        if (level.status !== "ok") continue;
-        const kept = level.entries.filter((entry) => entry.abs !== absolutePath);
-        if (kept.length !== level.entries.length) {
-          model.levels.set(abs, { ...level, entries: kept });
-          touched = true;
-        }
-      }
-      if (touched) bump(model);
-    };
-    let timer = null;
-    const schedule = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        refreshTickRef.current?.();
-      }, 500);
-    };
-    const unsubscribe = services.hub.follow(sessionId, (frame) => {
-      if (frame?.kind === "ready") {
-        schedule();
-      } else if (frame?.kind === "change") {
-        if (frame.change?.absent && frame.change.absolutePath) absent(frame.change.absolutePath);
-        schedule();
-      }
+    const sync = createChangeSync({
+      follow: services.hub.follow,
+      sessionId,
+      onAbsent: (absolutePath) => {
+        if (pruneAbsentEntry(model.levels, absolutePath)) bump(model);
+      },
+      onRefresh: () => refreshTickRef.current?.()
     });
     const onVisible = () => {
       if (document.visibilityState === "visible") refreshTickRef.current?.();
@@ -208,10 +190,9 @@ export function FilesTabBody({ useTabInfo, sessionId, useSessions, t }) {
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      unsubscribe();
+      sync.dispose();
       window.removeEventListener("focus", onVisible);
       document.removeEventListener("visibilitychange", onVisible);
-      if (timer) clearTimeout(timer);
     };
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [sessionId, root, visible]);

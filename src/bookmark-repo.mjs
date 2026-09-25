@@ -15,8 +15,15 @@ import { apiGet, apiPost } from "./api.mjs";
 const state = new Map();
 const listeners = new Set();
 
+/** 空/未加载书签集的稳定快照引用。useSyncExternalStore 对 getSnapshot 做
+ *  Object.is 比较：每次调用新建数组会让 React 判定"快照永远在变"→ 同步
+ *  重渲染死循环（React #185 Maximum update depth exceeded）。书签 tab 随
+ *  自动展开立即挂载、与首拉 /bookmarks 竞态的窗口即暴露此雷——快照 MUST
+ *  引用稳定。 */
+const EMPTY_LIST = Object.freeze([]);
+
 function snapshotOf(sessionId) {
-  return state.get(sessionId) ?? { list: [], loaded: false, error: null };
+  return state.get(sessionId) ?? { list: EMPTY_LIST, loaded: false, error: null };
 }
 
 function emit(sessionId) {
@@ -89,11 +96,11 @@ export const bookmarkRepo = {
     try {
       const data = await apiGet("/bookmarks", { sessionId });
       clearRetry(sessionId);
-      setEntry(sessionId, { list: Array.isArray(data.bookmarks) ? data.bookmarks : [], loaded: true, error: null });
+      setEntry(sessionId, { list: Array.isArray(data.bookmarks) ? data.bookmarks : EMPTY_LIST, loaded: true, error: null });
     } catch (error) {
       const message = String(error?.message || error);
       if (/session not found/i.test(message)) {
-        setEntry(sessionId, { list: [], loaded: false, error: null });
+        setEntry(sessionId, { list: EMPTY_LIST, loaded: false, error: null });
         scheduleRetry(ctx, sessionId, 1);
         return;
       }
@@ -103,13 +110,13 @@ export const bookmarkRepo = {
   /** 加入书签（响应体直落，幂等由宿主保证）。 */
   async add(ctx, sessionId, rel) {
     const data = await apiPost("/bookmark-add", { sessionId, path: rel });
-    setEntry(sessionId, { list: Array.isArray(data.bookmarks) ? data.bookmarks : [], loaded: true, error: null });
+    setEntry(sessionId, { list: Array.isArray(data.bookmarks) ? data.bookmarks : EMPTY_LIST, loaded: true, error: null });
     return data;
   },
   /** 移除书签（幂等）。 */
   async remove(ctx, sessionId, rel) {
     const data = await apiPost("/bookmark-remove", { sessionId, path: rel });
-    setEntry(sessionId, { list: Array.isArray(data.bookmarks) ? data.bookmarks : [], loaded: true, error: null });
+    setEntry(sessionId, { list: Array.isArray(data.bookmarks) ? data.bookmarks : EMPTY_LIST, loaded: true, error: null });
     return data;
   },
   /** 会话切换时清缓存（书签集随 cwd 走）并撤销未就绪重试。 */
