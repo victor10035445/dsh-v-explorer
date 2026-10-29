@@ -6,6 +6,9 @@
  *  2. open：路径逃逸 403（不真开 explorer）；未知会话 404
  *  3. open-browser：html → 200 + file:// URL（exec 已打桩，不会真开浏览器）；
  *     非 html / 目录 → 400；逃逸 → 403；不存在 → 404
+ *  3b. launch：命令形态 start "" /D "<脚本目录>" "<脚本路径>"（Windows 200）、
+ *     白名单（bat/cmd，大小写不敏感）与 .txt/.ps1 400、目录 400、含 % 路径 400、
+ *     逃逸 403、未知会话 404、非 Windows 平台门控 400——拒绝路径一律不发起进程
  *  4. snapshot：选区物化到 .dsh-v-explorer/refs/（经 .git/info/exclude 隐身）、空内容 400、未知会话 404
  *  5. pre-step 摘录捕获：引用 token → 原消息后附加冻结摘录上下文；无引用零开销
  *     通过；注入消息不重复处理；逃逸路径降级为「未捕获」说明而不失败整轮
@@ -26,14 +29,47 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dve-test-"));
 fs.writeFileSync(path.join(tmp, "readme.md"), "# hello\n\nworld\n");
 fs.writeFileSync(path.join(tmp, "index.html"), "<!doctype html><html><body>hi</body></html>\n");
 fs.mkdirSync(path.join(tmp, "sub"));
+/* launch 夹具：白名单命中（小写 / 大写 / .cmd）、白名单外（.txt / .ps1）、
+   含 % 的合法扩展名（%VAR% 展开不可转义中和 → 路由必须拒绝） */
+fs.mkdirSync(path.join(tmp, "tools"));
+fs.writeFileSync(path.join(tmp, "tools", "build.bat"), "@echo off\r\necho hi\r\n");
+/* 大写扩展名夹具独立成目录：Windows 文件系统大小写不敏感，同目录下
+   BUILD.BAT 与 build.bat 会是同一个文件（realpath 只还回其中一个拼写）。 */
+fs.mkdirSync(path.join(tmp, "tools", "upper"));
+fs.writeFileSync(path.join(tmp, "tools", "upper", "BUILD.BAT"), "@echo off\r\necho hi\r\n");
+fs.writeFileSync(path.join(tmp, "tools", "deploy.cmd"), "@echo off\r\necho hi\r\n");
+fs.writeFileSync(path.join(tmp, "notes.txt"), "notes\n");
+fs.writeFileSync(path.join(tmp, "install.ps1"), "Write-Host hi\n");
+fs.writeFileSync(path.join(tmp, "build%TEMP%.bat"), "@echo off\r\n");
+/* 目录名含 % 同样不可启动：%VAR% 展开会改写 `start` 收到的路径 */
+fs.mkdirSync(path.join(tmp, "%cache%"));
+fs.writeFileSync(path.join(tmp, "%cache%", "run.bat"), "@echo off\r\n");
 /* git 仓库形态：snapshot 的 ensureGitExcluded 只在 .git 存在时写排除条目 */
 fs.mkdirSync(path.join(tmp, ".git", "info"), { recursive: true });
 
 /* ---------- 打补丁并动态加载 ---------- */
 const source = fs.readFileSync(path.join(__dirname, "..", "lib", "index.js"), "utf8");
+/* exec / execFile 桩：记录每条命令串（/launch 要断言 start 的参数形态——旧桩
+   丢弃参数，无法验证 /D 与脚本目录），并返回一个只响应 spawn 的假子进程
+   （真实代码注册的是 "error" 监听，永不触发 → 走 800ms「已发起」路径）。
+   `__dveExecFailNext` 置真时改为抛出 error 事件，用来验「进程无法发起 → 500」，
+   即 spec 的「失败可感知、不出现假成功」。 */
 const patched = source.replace(
   'import { exec, execFile } from "node:child_process";',
-  'const exec = () => ({ on(ev, fn) { if (ev === "spawn") setImmediate(fn); } });\nconst execFile = () => ({ on(ev, fn) { if (ev === "spawn") setImmediate(fn); } });'
+  [
+    'globalThis.__dveExecCalls = [];',
+    'const makeFake = (kind) => (cmd, opts, cb) => {',
+    '  globalThis.__dveExecCalls.push({ kind, cmd });',
+    '  const failThis = globalThis.__dveExecFailNext === true;',
+    '  if (failThis) globalThis.__dveExecFailNext = false;',
+    '  return { on(ev, fn) {',
+    '    if (ev === "spawn") setImmediate(fn);',
+    '    if (ev === "error" && failThis) setImmediate(fn);',
+    '  } };',
+    '};',
+    'const exec = makeFake("exec");',
+    'const execFile = makeFake("execFile");'
+  ].join("\n")
 );
 if (patched === source) throw new Error("patch failed");
 const tmpModule = path.join(tmp, "host-under-test.mjs");
@@ -155,6 +191,83 @@ let handler = null;
   /* 未知会话 → 404（open-browser 路径上的会话解析） */
   r = await request("POST", "http://x/api/dsh-v-explorer/open-browser", { sessionId: "nope", path: "index.html" });
   if (r.status !== 404) throw new Error("unknown session must 404");
+
+  /* ---------- launch：批处理启动（start + 独立窗口，仅 .bat/.cmd、仅 Windows） ---------- */
+  /* exec 桩记录命令串：这里按 kind=exec 且以 start 开头的形态取「启动调用」。 */
+  const launchCommands = () =>
+    (globalThis.__dveExecCalls || []).map((c) => c.cmd).filter((cmd) => /^start "" \/D /.test(cmd));
+
+  /* 非白名单扩展名 / 目录 / 逃逸 / 未知会话：全部不发起进程（与平台无关的负路径） */
+  const callsBeforeNegatives = launchCommands().length;
+  r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "notes.txt" });
+  if (r.status !== 400) throw new Error("launch non-batch must 400, got " + r.status);
+  r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "install.ps1" });
+  if (r.status !== 400) throw new Error("launch ps1 must 400, got " + r.status);
+  r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "tools" });
+  if (r.status !== 400) throw new Error("launch directory must 400, got " + r.status);
+  if (!/not a file/.test(String(r.body.error))) throw new Error("launch directory error wrong: " + JSON.stringify(r.body));
+  r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "build%TEMP%.bat" });
+  if (r.status !== 400) throw new Error("launch %-path must 400, got " + r.status);
+  if (!/%/.test(String(r.body.error))) throw new Error("launch %-path error must explain %, got " + JSON.stringify(r.body));
+  /* spec 括号里点名的另一半：位于名为 %cache% 的子目录中的脚本同样拒绝 */
+  r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "%cache%/run.bat" });
+  if (r.status !== 400) throw new Error("launch %-dir must 400, got " + r.status);
+  if (!/%/.test(String(r.body.error))) throw new Error("launch %-dir error must explain %, got " + JSON.stringify(r.body));
+  r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "../outside.bat" });
+  if (r.status !== 403) throw new Error("launch escape must 403, got " + r.status);
+  r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "nope", path: "tools/build.bat" });
+  if (r.status !== 404) throw new Error("launch unknown session must 404, got " + r.status);
+  if (launchCommands().length !== callsBeforeNegatives) throw new Error("rejected launch must not spawn a process");
+
+  /* 平台门控：mock process.platform（可配置属性，用例后恢复）→ 400 且不发起进程 */
+  const realPlatform = process.platform;
+  try {
+    Object.defineProperty(process, "platform", { value: "linux" });
+    r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "tools/build.bat" });
+    if (r.status !== 400) throw new Error("launch on non-win32 must 400, got " + r.status);
+    if (!/only supported on Windows hosts/.test(String(r.body.error))) {
+      throw new Error("platform gate message wrong: " + JSON.stringify(r.body));
+    }
+    if (launchCommands().length !== callsBeforeNegatives) throw new Error("platform-gated launch must not spawn a process");
+  } finally {
+    Object.defineProperty(process, "platform", { value: realPlatform });
+  }
+
+  if (realPlatform === "win32") {
+    /* 成功路径：命令必须是 start "" /D "<脚本目录>" "<脚本路径>"（cwd = 脚本目录 = 双击语义） */
+    let before = launchCommands().length;
+    r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "tools/build.bat" });
+    if (r.status !== 200 || r.body.ok !== true) throw new Error("launch failed: " + JSON.stringify(r.body));
+    if (!/[\\/]tools[\\/]build\.bat$/.test(String(r.body.path))) throw new Error("launch path wrong: " + r.body.path);
+    let issued = launchCommands().slice(before);
+    if (issued.length !== 1) throw new Error("launch must issue exactly one start command, got " + JSON.stringify(issued));
+    const absBat = r.body.path;
+    const expected = `start "" /D "${path.dirname(absBat)}" "${absBat}"`;
+    if (issued[0] !== expected) throw new Error("launch command shape wrong:\n  got      " + issued[0] + "\n  expected " + expected);
+    if (!/\/D "/.test(issued[0])) throw new Error("launch command must carry /D");
+
+    /* 大写扩展名同样命中白名单（大小写不敏感：扩展名判定走 toLowerCase） */
+    before = launchCommands().length;
+    r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "tools/upper/BUILD.BAT" });
+    if (r.status !== 200 || r.body.ok !== true) throw new Error("launch uppercase ext must 200: " + JSON.stringify(r.body));
+    issued = launchCommands().slice(before);
+    if (issued.length !== 1 || !/BUILD\.BAT"$/.test(issued[0])) throw new Error("uppercase launch command wrong: " + JSON.stringify(issued));
+
+    /* .cmd 与 .bat 同族 */
+    r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "tools/deploy.cmd" });
+    if (r.status !== 200) throw new Error("launch .cmd must 200, got " + r.status);
+
+    /* 进程无法发起（exec 抛 error）→ 500 且 ok:false，绝不假成功 */
+    globalThis.__dveExecFailNext = true;
+    r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "tools/build.bat" });
+    if (r.status !== 500) throw new Error("launch spawn failure must 500, got " + r.status);
+    if (r.body.ok !== false) throw new Error("launch spawn failure must not fake success: " + JSON.stringify(r.body));
+    if (globalThis.__dveExecFailNext === true) throw new Error("fail-next flag was not consumed");
+  } else {
+    /* 非 Windows 宿主：所有 /launch 一律平台门控 400（上面的成功断言不适用） */
+    r = await request("POST", "http://x/api/dsh-v-explorer/launch", { sessionId: "s1", path: "tools/build.bat" });
+    if (r.status !== 400) throw new Error("launch must 400 on non-win32 host, got " + r.status);
+  }
 
   /* snapshot：会话选区物化到 .dsh-v-explorer/refs/，返回引用所需的路径与行数 */
   r = await request("POST", "http://x/api/dsh-v-explorer/snapshot", { sessionId: "s1", content: "hello\nworld" });

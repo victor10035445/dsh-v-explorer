@@ -19,7 +19,7 @@ import { buildRowMenuItems, RowMenu, useRowMenu } from "./row-menu.jsx";
 import { bookmarkRepo } from "./bookmark-repo.mjs";
 import { services } from "./services.mjs";
 import { fileAddressFor, joinWorkspacePath } from "./workspace-path.mjs";
-import { hasHiddenSegment, relFromAbs } from "./tree-utils.mjs";
+import { hasHiddenSegment, relFromAbs, rowKinds } from "./tree-utils.mjs";
 import { BOOKMARKS_TAB_ID, bookmarksTabDefinition } from "./tab-definitions.mjs";
 import { createChangeSync, pruneAbsentEntry } from "./changes-sync.mjs";
 import { failureLine } from "./files-tab.jsx";
@@ -197,7 +197,7 @@ export function BookmarksTabBody({ useTabInfo, sessionId, useSessions, t }) {
     e.preventDefault();
     const rel = relFromAbs(cwd, abs);
     const items = buildRowMenuItems(
-      { t, sessionId, rel, isDir, isHtml: /\.(html?|xhtml)$/i.test(abs) },
+      { t, sessionId, rel, isDir, kinds: rowKinds(abs) },
       { bookmarked, actions: services.actions }
     );
     openMenu(items, e.clientX, e.clientY);

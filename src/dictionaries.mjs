@@ -32,6 +32,7 @@ const zh = {
   "menu.copyPath": "复制路径",
   "menu.insertRef": "插入到会话",
   "menu.browse": "用浏览器打开",
+  "menu.launch": "启动",
   "menu.addBookmark": "加入书签",
   "menu.removeBookmark": "移除书签",
 
@@ -44,6 +45,8 @@ const zh = {
   "ex.toastCopied": "已复制",
   "ex.toastFail": "操作失败",
   "ex.toastRefInserted": "已插入引用",
+  /* 「已启动」而非「已成功」：start 只保证窗口已发起，脚本自身成败不可知 */
+  "ex.toastLaunched": "已启动 {name}",
   "ex.toastRefCopied": "已复制引用（composer 不可达）",
   "ex.toastRefFromSnapshot": "已引用快照",
   "ex.refInvalid": "引用失效",
@@ -80,6 +83,7 @@ const en = {
   "menu.copyPath": "Copy path",
   "menu.insertRef": "Insert into chat",
   "menu.browse": "Open in browser",
+  "menu.launch": "Run",
   "menu.addBookmark": "Add bookmark",
   "menu.removeBookmark": "Remove bookmark",
 
@@ -90,6 +94,7 @@ const en = {
   "ex.toastCopied": "Copied",
   "ex.toastFail": "Action failed",
   "ex.toastRefInserted": "Reference inserted",
+  "ex.toastLaunched": "Launched {name}",
   "ex.toastRefCopied": "Reference copied (composer unavailable)",
   "ex.toastRefFromSnapshot": "Snapshot referenced",
   "ex.refInvalid": "Reference invalid",

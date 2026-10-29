@@ -15,7 +15,7 @@ import { buildRowMenuItems, RowMenu, useRowMenu } from "./row-menu.jsx";
 import { bookmarkRepo } from "./bookmark-repo.mjs";
 import { services } from "./services.mjs";
 import { fileAddressFor, joinWorkspacePath } from "./workspace-path.mjs";
-import { compareEntries, hasHiddenSegment, relFromAbs } from "./tree-utils.mjs";
+import { compareEntries, hasHiddenSegment, relFromAbs, rowKinds } from "./tree-utils.mjs";
 import { createChangeSync, pruneAbsentEntry } from "./changes-sync.mjs";
 import { FILES_TAB_ID, filesTabDefinition } from "./tab-definitions.mjs";
 
@@ -237,7 +237,7 @@ export function FilesTabBody({ useTabInfo, sessionId, useSessions, t }) {
     e.preventDefault();
     const rel = relFromAbs(cwd, entry.abs);
     const items = buildRowMenuItems(
-      { t, sessionId, rel, isDir: entry.type === "directory", isHtml: /\.(html?|xhtml)$/i.test(entry.name) },
+      { t, sessionId, rel, isDir: entry.type === "directory", kinds: rowKinds(entry.name) },
       { bookmarked, actions: services.actions }
     );
     openMenu(items, e.clientX, e.clientY);

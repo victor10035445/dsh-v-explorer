@@ -3,10 +3,11 @@
  *  1. pickBlockForLine：行号导航的块选择（覆盖优先 → 前一个块 → 第一块）
  *  2. prettifyDecision：JSON 美化决策（eof / 2MB 上限 / 解析失败）
  *  3. compareEntries / hasHiddenSegment：files 树排序与隐藏段判定
+ *  3b. rowKinds：扩展名门控（html 浏览 / bat·cmd 启动）判定
  * 运行：node tests/renderer-logic-smoke.mjs
  */
 import { pickBlockForLine, RENDER_CHAR_LIMIT, readerMarkdownDefinition, READER_MARKDOWN_ID, prettifyDecision, PRETTIFY_CHAR_LIMIT, readerJsonDefinition, READER_JSON_ID } from "../src/reader-shared.mjs";
-import { compareEntries, hasHiddenSegment } from "../src/tree-utils.mjs";
+import { compareEntries, hasHiddenSegment, rowKinds } from "../src/tree-utils.mjs";
 import { filesTabDefinition, FILES_TAB_ID, bookmarksTabDefinition, BOOKMARKS_TAB_ID } from "../src/tab-definitions.mjs";
 import { createChangesHub } from "../src/changes-hub.mjs";
 
@@ -59,6 +60,24 @@ eq(hasHiddenSegment(".dsh-v-explorer/bookmarks.json"), true, "隐藏段命中");
 eq(hasHiddenSegment("sub/.h.txt"), true, "深层隐藏段命中");
 eq(hasHiddenSegment("a.md"), false, "普通路径不命中");
 eq(hasHiddenSegment("..\\x"), true, ".. 视为隐藏段（与书签规则一致）");
+
+/* ---- 3b. rowKinds：扩展名门控动作（html 浏览 / batch 启动） ---- */
+const kindsOf = (name) => {
+  const k = rowKinds(name);
+  return [k.html, k.batch].map((v) => (v ? 1 : 0)).join("");
+};
+eq(kindsOf("build.bat"), "01", ".bat 命中 batch");
+eq(kindsOf("deploy.cmd"), "01", ".cmd 命中 batch");
+eq(kindsOf("BUILD.BAT"), "01", "大写扩展名命中 batch（大小写不敏感）");
+eq(kindsOf("Index.HTML"), "10", "大写 html 命中 html");
+eq(kindsOf("index.html"), "10", "index.html 命中 html");
+eq(kindsOf("index.htm"), "10", "index.htm 命中 html");
+eq(kindsOf("page.xhtml"), "10", "index.xhtml 命中 html");
+eq(kindsOf("notes.txt"), "00", "notes.txt 两者皆否");
+eq(kindsOf("README"), "00", "无扩展名两者皆否");
+eq(kindsOf("bat"), "00", "纯文件名 bat 不误命中");
+eq(rowKinds(undefined).html, false, "缺省入参安全（html）");
+eq(rowKinds(undefined).batch, false, "缺省入参安全（batch）");
 
 /* ---- 4. 注册面定义（元数据形状） ---- */
 const t = (key) => "T:" + key;

@@ -6,9 +6,10 @@
  * 不画任何面板）。模块级总线 + useSyncExternalStore，任何组件/非组件代码
  * （右键菜单动作、chip 动作）都能弹 toast / 开选区菜单。
  */
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { apiPost, copyText } from "./api.mjs";
 import { appendToDraft } from "./input-facade.mjs";
+import { placeMenu } from "./menu-placement.mjs";
 import { INLINE_SNIPPET_MAX_CHARS, buildRefToken } from "./ref-shared.mjs";
 
 /* ------------------------------------------------------------------ *
@@ -152,6 +153,8 @@ function ToastStack() {
 function SelectionMenuHost() {
   useSyncExternalStore(uiBus.subscribe, uiBus.getSnapshot, uiBus.getSnapshot);
   const menu = uiBus.selectionMenu;
+  const ref = useRef(null);
+  const [frame, setFrame] = useState(null);
   useEffect(() => {
     if (!menu) return undefined;
     const dismiss = (e) => {
@@ -168,9 +171,39 @@ function SelectionMenuHost() {
       document.removeEventListener("keydown", key);
     };
   }, [menu]);
+
+  /* 与行菜单同一套视口内定位（placeMenu 纯函数）：靠近右/下边缘时翻转 + 贴边。 */
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!menu || !el) {
+      setFrame(null);
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    setFrame(
+      placeMenu({
+        x: menu.x,
+        y: menu.y,
+        width: rect.width,
+        height: rect.height,
+        viewportWidth: typeof window === "undefined" ? undefined : window.innerWidth,
+        viewportHeight: typeof window === "undefined" ? undefined : window.innerHeight
+      })
+    );
+  }, [menu]);
+
   if (!menu) return null;
   return (
-    <div className="dve-selMenu" style={{ left: menu.x, top: menu.y }}>
+    <div
+      ref={ref}
+      className="dve-selMenu"
+      style={{
+        left: frame ? frame.left : menu.x,
+        top: frame ? frame.top : menu.y,
+        maxHeight: frame?.maxHeight,
+        overflowY: "auto"
+      }}
+    >
       {menu.items.map((item, index) => (
         <button
           key={index}

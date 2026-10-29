@@ -92,7 +92,7 @@ const CSS = `
 .dve-iconBtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dve-iconBtn:disabled{opacity:.4;cursor:default}
 /* ── 右键菜单 / 框选菜单 ── */
-.dve-menu,.dve-selMenu{position:fixed;z-index:10000;min-width:170px;padding:4px;background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:var(--dsw-shadow-lv3)}
+.dve-menu,.dve-selMenu{box-sizing:border-box;position:fixed;z-index:10000;min-width:170px;padding:4px;background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:var(--dsw-shadow-lv3)}
 .dve-menuItem,.dve-selItem{display:block;width:100%;text-align:left;padding:7px 12px;border:none;background:transparent;font:inherit;font-size:12.5px;color:var(--dsw-alias-label-primary);border-radius:7px;cursor:pointer}
 .dve-menuItem:hover,.dve-selItem:hover{background:var(--dsw-alias-interactive-bg-hover)}
 /* ── toast 栈 ── */
