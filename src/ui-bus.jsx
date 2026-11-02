@@ -10,6 +10,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import { apiPost, copyText } from "./api.mjs";
 import { appendToDraft } from "./input-facade.mjs";
 import { placeMenu } from "./menu-placement.mjs";
+import { onScreenSessionId } from "./on-screen-session.mjs";
 import { INLINE_SNIPPET_MAX_CHARS, buildRefToken } from "./ref-shared.mjs";
 
 /* ------------------------------------------------------------------ *
@@ -268,13 +269,8 @@ export function installConversationSelection(ctx, ctxRef, t) {
   }, "dsh-v-explorer: conversation selection menu");
 }
 
-/** 读当前会话 id（sessions.list 的 current）。 */
+/** 读屏上会话 id（`ctx.sidebarRight.mounted`；0.2.1 起 list 快照无 current）。
+ *  观察口缺席/读数抛错时安全返回 undefined（框选引用降级为仅复制）。 */
 export function currentSessionId(ctxRef) {
-  try {
-    const list = ctxRef.current?.sessions?.list;
-    const snap = typeof list?.getSnapshot === "function" ? list.getSnapshot() : null;
-    return snap?.current;
-  } catch {
-    return undefined;
-  }
+  return onScreenSessionId(ctxRef?.current);
 }

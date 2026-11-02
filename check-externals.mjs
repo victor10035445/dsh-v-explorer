@@ -1,5 +1,5 @@
 /**
- * check-externals.mjs — 构建期 externals 漂移检查（0.1.5-rc.2 模块表适配，规格 platform-compat）。
+ * check-externals.mjs — 构建期 externals 漂移检查（0.2.1-rc.5 模块表适配，规格 platform-compat）。
  *
  * 对 bundle 产物的全部裸 require 说明符与 package.json 的 dsh.client 声明做
  * 双向交叉校验（运行时对应物：dsh-client-modules 的 makeRequire 三级解析与
@@ -22,8 +22,10 @@
  * seed 允许表再推导方法（DSH 升级后务必刷新）：在
  *   C:\Users\<user>\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\
  *     node_modules\@deepseek-ai\dsh-web-frontend\dist\assets\*.js
- * 中搜 `staticModules`，其 create 调用旁的字面量函数（如 `by()`）即平台 seed 表。
- * 0.1.5-rc.2 实测：0.1.2 表 + `@deepseek-ai/dsh-client-ui-dockkit`。
+ * 中搜 `staticModules`，其 create 调用旁的字面量函数（如 `by()` / `OZ()`）即平台
+ * seed 表。
+ * 0.2.1-rc.5 实测：0.1.5-rc.2 表 + `zod` + `@tanstack/react-virtual`
+ * （前端 dist `staticModules: OZ()` 字面量表，2026-11-02 核实）。
  */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -33,13 +35,15 @@ const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)));
 const TARGET_FILE = process.argv[2] ?? join(PKG_ROOT, "lib", "client.js");
 const PKG_JSON = process.argv[3] ?? join(PKG_ROOT, "package.json");
 
-/** 平台 seed word 允许表（0.1.5-rc.2；来源与再推导方法见文件头注释）。 */
+/** 平台 seed word 允许表（0.2.1-rc.5；来源与再推导方法见文件头注释）。 */
 const SEED_WORDS = new Set([
   "react",
   "react/jsx-runtime",
   "react-dom",
   "react-dom/client",
   "@deepseek-ai/cordis",
+  "zod",
+  "@tanstack/react-virtual",
   "@deepseek-ai/dsh-client-store",
   "@deepseek-ai/dsh-client-ui-slots",
   "@deepseek-ai/dsh-client-ui-primitives",

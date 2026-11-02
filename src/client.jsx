@@ -12,8 +12,13 @@
  *    sidebar.right.pane.tab 座。官方树的下拉仍在，可切回
  *  - 变更流：workspaceFiles.changes 的插件单点订阅（官方 ChangeFeed 私有），
  *    每会话至多一条，树身/书签共享，可见才订阅、归零即 dispose
- *  - 自动展开：进入会话幂等落出 files + bookmarks 两页（最常用常开，files 保持
- *    前台）；无跨会话关闭记忆——手动收起仅作用于当前会话（specs/sidebar-auto-open）
+ *  - 自动展开（让位语义，change port-dsh-0-2-1-sidebar-yield）：无记忆会话首次
+ *    进入时播种一次——展开右栏 + 落出 files + bookmarks 两页（files 保持前台）；
+ *    此后让位官方每会话持久化，手动收起/改布局/刷新还原一律不碰
+ *    （specs/sidebar-auto-open；驱动信号 ctx.sidebarRight.mounted）
+ *  - 书签 SSE 会话作用域：按屏上会话连接 /events（多标签同步）；读数与订阅均走
+ *    ctx.sidebarRight.mounted（0.2.1 起 sessions.list.current 已删除，list 提交
+ *    不再代表切换）
  *  - 默认宽度：装配时把右栏保存偏好预置为契约最小 300px（layout panels 绑定
  *    动作，官方同路写入），首开 45% 播种不再生效；会话内拖拽宽度由官方承接
  *  - 引用体系（保留项）：composer chip 条（conversation.input.dock）点击改走
@@ -23,14 +28,15 @@
  *    预览浮窗整体退役（specs/composer-integration 与 6.x 退役任务）
  *
  * 降级（design D9）：sidebarRightTabs / documentPreviews / remote.workspaceFiles
- * 任一缺席时跳过对应注册面（console.warn 一次），chips/框选/书签 SSE 照常——
- * 与 0.1.2 的「响亮失败」不同，这是对未知新版的静默降级。
+ * 任一缺席时跳过对应注册面（console.warn 一次），chips/框选照常；
+ * `ctx.sidebarRight.mounted` 观察口缺席时，自动展开与书签 SSE 各自警告一次并
+ * 跳过（chip 条级降级）——与 0.1.2 的「响亮失败」不同，这是对未知新版的静默降级。
  */
 import { services, provideServices } from "./services.mjs";
 import { ctxRef } from "./input-facade.mjs";
 import { dictionaries } from "./dictionaries.mjs";
 import { createChangesHub } from "./changes-hub.mjs";
-import { bookmarkRepo } from "./bookmark-repo.mjs";
+import { installBookmarksEvents } from "./bookmarks-events.mjs";
 import { installConversationSelection, OverlayUi } from "./ui-bus.jsx";
 import { createRowActions } from "./row-menu.jsx";
 import { installAutoOpen } from "./auto-open.mjs";
@@ -46,7 +52,9 @@ import PREVIEW_CSS from "virtual:dve-reader-css";
 const PLUGIN_ID = "dsh-v-explorer";
 const NS = "dsh-v-explorer";
 
-/** 依赖的服务名（loader 排序；都是 0.1.5-rc.2 平台种子/官方模块）。 */
+/** 依赖的服务名（loader 排序；都是 0.2.1-rc.5 平台种子/官方模块）。
+ *  `sessions` 仍需要——但只读 `list.byId`（cwd 等会话摘要），屏上会话一律走
+ *  `sidebarRight.mounted`（0.2.1 起 list 快照无 current）。 */
 export const inject = [
   "slots",
   "locale",
@@ -169,50 +177,6 @@ function BookmarksTabTitle({ t }) {
 }
 
 /* ------------------------------------------------------------------ *
- * 书签多标签页同步：/events SSE（bookmarks-changed）按当前会话连接
- * ------------------------------------------------------------------ */
-
-function installBookmarksEvents(ctx) {
-  ctx.effect(() => {
-    let source = null;
-    let connected = undefined;
-    const connect = () => {
-      let sessionId;
-      try {
-        sessionId = ctx.sessions?.list?.getSnapshot?.()?.current;
-      } catch {
-        return;
-      }
-      if (sessionId === connected) return;
-      connected = sessionId;
-      if (source) {
-        source.close();
-        source = null;
-      }
-      if (sessionId === undefined) return;
-      bookmarkRepo.refresh(ctxRef.current, sessionId);
-      source = new EventSource(`/api/dsh-v-explorer/events?sessionId=${encodeURIComponent(sessionId)}`);
-      source.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data?.type === "bookmarks-changed") bookmarkRepo.refresh(ctxRef.current, sessionId);
-        } catch {
-          /* 非 JSON 帧（注释/心跳）忽略 */
-        }
-      };
-      /* onerror：EventSource 自带重连；会话失效 404 时静默等待下一轮连接 */
-    };
-    const unsubscribe = ctx.sessions?.list?.subscribe?.(connect);
-    connect();
-    return () => {
-      if (typeof unsubscribe === "function") unsubscribe();
-      if (source) source.close();
-      connected = undefined;
-    };
-  }, "dsh-v-explorer: bookmarks events");
-}
-
-/* ------------------------------------------------------------------ *
  * 插件主体
  * ------------------------------------------------------------------ */
 
@@ -280,7 +244,7 @@ export function apply(ctx) {
       provideServices({ hub: createChangesHub(() => ctxRef.current?.remote) });
       /* ★ 角标随书签仓库变化实时刷新（files-tab 的 repo→版本号桥，装一次）。 */
       hookBookmarkVersion();
-      installAutoOpen(ctx, ctxRef);
+      installAutoOpen(ctx);
     } catch (error) {
       console.warn("[dsh-v-explorer] sidebar page registration skipped:", error);
     }
